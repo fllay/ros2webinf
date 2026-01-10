@@ -1,729 +1,755 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ROS 2 WebSocket with Pan Control</title>
-  </head>
-  <body>
-    <ul id="context-menu" class="custom-menu">
-      <li id="end">End</li>
-      <li id="zoom">Enable Zoom</li>
-      <li id="pan">Enable Pan</li>
-      <li id="disable">Disable All</li>
-    </ul>
-    <div class="container-fluid">
-      <div class="row">
-        <div class="col s3 column-1 button-container">
-          <h5>Menu Content</h5>
-          <a href="#!" class="btn menu-btn" data-action="navtopose">Nav to pose</a>
-          <a href="#!" class="btn menu-btn" data-action="drawpath">Draw Path</a>
-          <a href="#!" class="btn menu-btn" data-action="pathfollow">Path follower</a>
-          <a href="#!" class="btn menu-btn" data-action="none">Disable All</a>
-        </div>
 
-        <div class="col s6 column-2">
-          <p>Map view (Hold Ctrl+Drag to Pan)</p>
-          <div id="3d-viewer"></div>
-        </div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ROS 2 WebSocket with Pan Control</title>
+</head>
 
-        <div class="col s3 column-3">
-          <div class="inner-columns">
-            <div class="inner-col-left">
-              <h6>View Rotation</h6>
-              <div class="rotation-controls-vertical">
-                <button class="btn-small rotation-btn" id="rotate-ccw" title="Rotate +90°">↺ +90°</button>
-                <button class="btn-small rotation-btn" id="rotate-reset" title="Reset rotation">Reset</button>
-                <button class="btn-small rotation-btn" id="rotate-cw" title="Rotate -90°">↻ -90°</button>
-              </div>
+<body>
+  <ul id="context-menu" class="custom-menu">
+    <li id="end">End</li>
+    <li id="zoom">Enable Zoom</li>
+    <li id="pan">Enable Pan</li>
+    <li id="disable">Disable All</li>
+  </ul>
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col s3 column-1 button-container">
+        <h5>Menu Content</h5>
+        <a href="#!" class="btn menu-btn" data-action="navtopose">Nav to pose</a>
+        <a href="#!" class="btn menu-btn" data-action="drawpath">Draw Path</a>
+        <a href="#!" class="btn menu-btn" data-action="pathfollow">Path follower</a>
+        <a href="#!" class="btn menu-btn" data-action="none">Disable All</a>
+      </div>
+
+      <div class="col s6 column-2">
+        <p>Map view (Hold Ctrl+Drag to Pan)</p>
+        <div id="3d-viewer"></div>
+      </div>
+
+      <div class="col s3 column-3">
+        <div class="inner-columns">
+          <div class="inner-col-left">
+            <h6>View Rotation</h6>
+            <div class="rotation-controls-vertical">
+              <button class="btn-small rotation-btn" id="rotate-ccw" title="Rotate +90°">↺ +90°</button>
+              <button class="btn-small rotation-btn" id="rotate-reset" title="Reset rotation">Reset</button>
+              <button class="btn-small rotation-btn" id="rotate-cw" title="Rotate -90°">↻ -90°</button>
             </div>
-            
-            <div class="inner-col-right">
-              <h6>Additional</h6>
-              <p>Content here.</p>
-              <a href="#!" class="btn menu-btn btn-small" data-action="startminimal">Upstart</a>
-              <a href="#!" class="btn menu-btn btn-small" data-action="stopminimal">Stop</a>
-            </div>
+          </div>
+
+          <div class="inner-col-right">
+            <h6>Additional</h6>
+            <p>Content here.</p>
+            <a href="#!" class="btn menu-btn btn-small" data-action="startminimal">Upstart</a>
+            <a href="#!" class="btn menu-btn btn-small" data-action="stopminimal">Stop</a>
           </div>
         </div>
       </div>
     </div>
+  </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
 
-    <style>
-      .button-container {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-      .full-height {
-        height: 100vh;
-      }
-      .container {
-        height: 100%;
-      }
-      .container-fluid {
-        width: 100%;
-        height: 100%;
-        margin: 0;
-        padding: 0;
-      }
-      html, body {
-        margin: 0;
-        height: 100%;
-      }
-      .row {
-        height: 100%;
-        margin: 0;
-      }
-      
-      .rotation-controls-vertical {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        margin-top: 10px;
-      }
-      
-      .inner-columns {
-        display: flex;
-        gap: 10px;
-        height: 100%;
-      }
-      
-      .inner-col-left {
-        flex: 1;
-        padding: 10px;
-        background-color: #a5d6a7;
-      }
-      
-      .inner-col-right {
-        flex: 1;
-        padding: 10px;
-        background-color: #90caf9;
-      }
-      
-      .inner-col-left h6,
-      .inner-col-right h6 {
-        margin-top: 0;
-        font-size: 14px;
-        font-weight: bold;
-      }
-      
-      .inner-col-right p {
-        font-size: 12px;
-        margin: 10px 0;
-      }
-      
-      .rotation-btn {
-        background-color: #1976d2 !important;
-        color: white;
-        flex: 1;
-        min-width: 60px;
-        font-size: 11px;
-        padding: 8px 4px !important;
-      }
-      .rotation-btn:hover {
-        background-color: #1565c0 !important;
-      }
-      
-      #3d-viewer {
-        width: 100%;
-        height: 100%;
-        background-color: #e0e0e0;
-        cursor: default;
-      }
-      #3d-viewer.panning {
-        cursor: grab;
-      }
-      #3d-viewer.panning:active {
-        cursor: grabbing;
-      }
-      .column-1 {
-        background-color: #ffccbc;
-        flex: 1;
-        min-width: 200px;
-      }
-      .column-2 {
-        background-color: #bbdefb;
-        flex: 3;
-      }
-      .column-3 {
-        background-color: #c8e6c9;
-        flex: 1;
-      }
-      .custom-menu {
-        position: absolute;
-        display: none;
-        background-color: #f9f9f9;
-        border: 1px solid #ccc;
-        padding: 10px;
-        box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-        z-index: 1000;
-      }
-      .custom-menu li {
-        list-style: none;
-        padding: 8px 12px;
-        cursor: pointer;
-      }
-      .custom-menu li:hover {
-        background-color: #ddd;
-      }
-    </style>
+  <style>
+    .button-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
 
-    <script>
-      const ws = new WebSocket("ws://192.168.68.36:8888");
-      var mapres = 0;
+    .full-height {
+      height: 100vh;
+    }
 
-      function initThreeJS() {
-        var container = document.getElementById("3d-viewer");
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(
-          75,
-          container.clientWidth / container.clientWidth,
-          0.1,
-          1000
-        );
+    .container {
+      height: 100%;
+    }
 
-        const renderer = new THREE.WebGLRenderer();
-        renderer.setSize(container.clientWidth, container.clientWidth);
-        container.appendChild(renderer.domElement);
+    .container-fluid {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
 
-        const light = new THREE.AmbientLight(0x404040);
-        scene.add(light);
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+    }
 
-        var grid = new THREE.GridHelper(100, 10);
-        grid.geometry.rotateX(Math.PI / 2);
-        grid.renderOrder = 6;
-        scene.add(grid);
+    .row {
+      height: 100%;
+      margin: 0;
+    }
 
-        const axesHelper = new THREE.AxesHelper(5);
-        axesHelper.renderOrder = 8;
-        scene.add(axesHelper);
+    .rotation-controls-vertical {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
 
-        const dir = new THREE.Vector3(1, 0, 0);
-        dir.normalize();
-        const origin = new THREE.Vector3(0, 0, 0);
-        const length = 1;
-        const hex = 0xffff00;
-        const arrowHelper = new THREE.ArrowHelper(dir, origin, length, hex);
-        arrowHelper.renderOrder = 9;
-        scene.add(arrowHelper);
+    .inner-columns {
+      display: flex;
+      gap: 10px;
+      height: 100%;
+    }
 
-        let mapTexture, mapMaterial, mapMesh, org_x, org_y, pointCloud, mheight, arrowPose, map_quatanion;
-        let enableNavToPose = false;
-        let enableDrawLine = false;
-        let enablePathFollow = false;
-        let points = [];
-        let line, line_cursor;
-        const mainCanvas = renderer.domElement;
+    .inner-col-left {
+      flex: 1;
+      padding: 10px;
+      background-color: #a5d6a7;
+    }
 
-        // Pan control variables
-        let isPanning = false;
-        let previousMousePosition = { x: 0, y: 0 };
+    .inner-col-right {
+      flex: 1;
+      padding: 10px;
+      background-color: #90caf9;
+    }
 
-        // Camera rotation tracking
-        let cameraRotationAngle = 0;
-        const initialCameraZ = 500;
+    .inner-col-left h6,
+    .inner-col-right h6 {
+      margin-top: 0;
+      font-size: 14px;
+      font-weight: bold;
+    }
 
-        function base64ToArrayBuffer(base64) {
-          var binaryString = window.atob(base64);
-          var len = binaryString.length;
-          var bytes = new Uint8Array(len);
-          for (var i = 0; i < len; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          return bytes.buffer;
+    .inner-col-right p {
+      font-size: 12px;
+      margin: 10px 0;
+    }
+
+    .rotation-btn {
+      background-color: #1976d2 !important;
+      color: white;
+      flex: 1;
+      min-width: 60px;
+      font-size: 11px;
+      padding: 8px 4px !important;
+    }
+
+    .rotation-btn:hover {
+      background-color: #1565c0 !important;
+    }
+
+    #3d-viewer {
+      width: 100%;
+      height: 100%;
+      background-color: #e0e0e0;
+      cursor: default;
+    }
+
+    #3d-viewer.panning {
+      cursor: grab;
+    }
+
+    #3d-viewer.panning:active {
+      cursor: grabbing;
+    }
+
+    .column-1 {
+      background-color: #ffccbc;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .column-2 {
+      background-color: #bbdefb;
+      flex: 3;
+    }
+
+    .column-3 {
+      background-color: #c8e6c9;
+      flex: 1;
+    }
+
+    .custom-menu {
+      position: absolute;
+      display: none;
+      background-color: #f9f9f9;
+      border: 1px solid #ccc;
+      padding: 10px;
+      box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+    }
+
+    .custom-menu li {
+      list-style: none;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    .custom-menu li:hover {
+      background-color: #ddd;
+    }
+  </style>
+
+  <script>
+    const ws = new WebSocket("ws://192.168.68.36:8888");
+    var mapres = 0;
+
+    function initThreeJS() {
+      var container = document.getElementById("3d-viewer");
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(
+        75,
+        container.clientWidth / container.clientWidth,
+        0.1,
+        1000
+      );
+
+      const renderer = new THREE.WebGLRenderer();
+      renderer.setSize(container.clientWidth, container.clientWidth);
+      container.appendChild(renderer.domElement);
+
+      const light = new THREE.AmbientLight(0x404040);
+      scene.add(light);
+
+      var grid = new THREE.GridHelper(100, 10);
+      grid.geometry.rotateX(Math.PI / 2);
+      grid.renderOrder = 6;
+      scene.add(grid);
+
+      const axesHelper = new THREE.AxesHelper(5);
+      axesHelper.renderOrder = 8;
+      scene.add(axesHelper);
+
+      const dir = new THREE.Vector3(1, 0, 0);
+      dir.normalize();
+      const origin = new THREE.Vector3(0, 0, 0);
+      const length = 1;
+      const hex = 0xffff00;
+      const arrowHelper = new THREE.ArrowHelper(dir, origin, length, hex);
+      arrowHelper.renderOrder = 9;
+      scene.add(arrowHelper);
+
+      let mapTexture, mapMaterial, mapMesh, org_x, org_y, pointCloud, mheight, arrowPose, map_quatanion;
+      let enableNavToPose = false;
+      let enableDrawLine = false;
+      let enablePathFollow = false;
+      let points = [];
+      let line, line_cursor;
+      const mainCanvas = renderer.domElement;
+
+      // Pan control variables
+      let isPanning = false;
+      let previousMousePosition = { x: 0, y: 0 };
+
+      // Camera rotation tracking
+      let cameraRotationAngle = 0;
+      const initialCameraZ = 500;
+
+      function base64ToArrayBuffer(base64) {
+        var binaryString = window.atob(base64);
+        var len = binaryString.length;
+        var bytes = new Uint8Array(len);
+        for (var i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
         }
+        return bytes.buffer;
+      }
 
-        function parsePointCloud2(message) {
-          var points = [];
-          var data = message.data;
-          if (typeof data === "string") {
-            data = base64ToArrayBuffer(data);
-          }
-          if (!(data instanceof ArrayBuffer)) {
-            console.error("Data is not in a valid ArrayBuffer format");
-            return points;
-          }
-          var pointStep = message.point_step;
-          var offsetX = message.fields.find((f) => f.name === "x").offset;
-          var offsetY = message.fields.find((f) => f.name === "y").offset;
-          var offsetZ = message.fields.find((f) => f.name === "z").offset;
-          var view = new DataView(data);
-          for (var i = 0; i < data.byteLength; i += pointStep) {
-            var x = view.getFloat32(i + offsetX, true);
-            var y = view.getFloat32(i + offsetY, true);
-            var z = view.getFloat32(i + offsetZ, true);
-            if (isFinite(x) && isFinite(y) && isFinite(z)) {
-              points.push(new THREE.Vector3(x, y, z));
-            }
-          }
+      function parsePointCloud2(message) {
+        var points = [];
+        var data = message.data;
+        if (typeof data === "string") {
+          data = base64ToArrayBuffer(data);
+        }
+        if (!(data instanceof ArrayBuffer)) {
+          console.error("Data is not in a valid ArrayBuffer format");
           return points;
         }
-
-        function renderPointCloud(points) {
-          var geometry = new THREE.BufferGeometry();
-          var vertices = new Float32Array(points.length * 3);
-          for (var i = 0; i < points.length; i++) {
-            vertices[i * 3] = points[i].x / mapres;
-            vertices[i * 3 + 1] = points[i].y / mapres;
-            vertices[i * 3 + 2] = points[i].z;
+        var pointStep = message.point_step;
+        var offsetX = message.fields.find((f) => f.name === "x").offset;
+        var offsetY = message.fields.find((f) => f.name === "y").offset;
+        var offsetZ = message.fields.find((f) => f.name === "z").offset;
+        var view = new DataView(data);
+        for (var i = 0; i < data.byteLength; i += pointStep) {
+          var x = view.getFloat32(i + offsetX, true);
+          var y = view.getFloat32(i + offsetY, true);
+          var z = view.getFloat32(i + offsetZ, true);
+          if (isFinite(x) && isFinite(y) && isFinite(z)) {
+            points.push(new THREE.Vector3(x, y, z));
           }
-          geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
-          var material = new THREE.PointsMaterial({ color: 0xff0000, side: THREE.DoubleSide, size: 1 });
-          if (pointCloud) {
-            scene.remove(pointCloud);
-          }
-          pointCloud = new THREE.Points(geometry, material);
-          pointCloud.renderOrder = 4;
-          pointCloud.position.set(0, 0, 0);
-          scene.add(pointCloud);
         }
+        return points;
+      }
 
-        function drawMap(message) {
-          const width = message.info.width;
-          const height = message.info.height;
-          const resolution = message.info.resolution;
-          const origin = message.info.origin;
-          org_x = origin.position.x;
-          org_y = origin.position.y;
-          mheight = height;
-          mapres = resolution;
-          map_quatanion = message.info.origin.orientation;
+      function renderPointCloud(points) {
+        var geometry = new THREE.BufferGeometry();
+        var vertices = new Float32Array(points.length * 3);
+        for (var i = 0; i < points.length; i++) {
+          vertices[i * 3] = points[i].x / mapres;
+          vertices[i * 3 + 1] = points[i].y / mapres;
+          vertices[i * 3 + 2] = points[i].z;
+        }
+        geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+        var material = new THREE.PointsMaterial({ color: 0xff0000, side: THREE.DoubleSide, size: 1 });
+        if (pointCloud) {
+          scene.remove(pointCloud);
+        }
+        pointCloud = new THREE.Points(geometry, material);
+        pointCloud.renderOrder = 4;
+        pointCloud.position.set(0, 0, 0);
+        scene.add(pointCloud);
+      }
 
-          const colors = ["#ffffff", "#000000", "#606060"];
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
+      function drawMap(message) {
+        const width = message.info.width;
+        const height = message.info.height;
+        const resolution = message.info.resolution;
+        const origin = message.info.origin;
+        org_x = origin.position.x;
+        org_y = origin.position.y;
+        mheight = height;
+        mapres = resolution;
+        map_quatanion = message.info.origin.orientation;
 
-          for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-              const index = y * width + x;
-              const flippedY = height - 1 - y;
-              if (message.data[index] == -1) {
-                ctx.fillStyle = colors[2];
-              } else if (message.data[index] == 0) {
-                ctx.fillStyle = colors[0];
-              } else {
-                ctx.fillStyle = colors[1];
-              }
-              const worldX = x;
-              const worldY = flippedY;
-              const canvasX = worldX;
-              const canvasY = worldY;
-              ctx.fillRect(canvasX, canvasY, 1, 1);
+        const colors = ["#ffffff", "#000000", "#606060"];
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const index = y * width + x;
+            const flippedY = height - 1 - y;
+            if (message.data[index] == -1) {
+              ctx.fillStyle = colors[2];
+            } else if (message.data[index] == 0) {
+              ctx.fillStyle = colors[0];
+            } else {
+              ctx.fillStyle = colors[1];
             }
+            const worldX = x;
+            const worldY = flippedY;
+            const canvasX = worldX;
+            const canvasY = worldY;
+            ctx.fillRect(canvasX, canvasY, 1, 1);
           }
-
-          if (mapTexture) {
-            scene.remove(mapMesh);
-          }
-
-          mapTexture = new THREE.CanvasTexture(canvas);
-          mapTexture.needsUpdate = true;
-          mapMaterial = new THREE.MeshBasicMaterial({ map: mapTexture, side: THREE.DoubleSide });
-          const mapGeometry = new THREE.PlaneGeometry(width, height);
-          mapMesh = new THREE.Mesh(mapGeometry, mapMaterial);
-          mapMesh.renderOrder = 1;
-          mapMesh.position.set(origin.position.x / resolution + width / 2, origin.position.y / resolution + height / 2, 0);
-          scene.add(mapMesh);
         }
 
-        const geometry_cube = new THREE.BoxGeometry(3, 3, 3);
-        const material_cube = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-        const cube_robot = new THREE.Mesh(geometry_cube, material_cube);
-        scene.add(cube_robot);
-
-        function updatePose(pose) {
-          const { x, y, z } = pose.pose.position;
-          const { x: qx, y: qy, z: qz, w: qw } = pose.pose.orientation;
-          cube_robot.position.set(x / mapres, y / mapres, z / mapres);
-          const euler = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(qx, qy, qz, qw));
-          cube_robot.rotation.set(euler.x, euler.y, euler.z);
+        if (mapTexture) {
+          scene.remove(mapMesh);
         }
 
-        ws.onopen = function () {
-          console.log("WebSocket connection opened");
+        mapTexture = new THREE.CanvasTexture(canvas);
+        mapTexture.needsUpdate = true;
+        mapMaterial = new THREE.MeshBasicMaterial({ map: mapTexture, side: THREE.DoubleSide });
+        const mapGeometry = new THREE.PlaneGeometry(width, height);
+        mapMesh = new THREE.Mesh(mapGeometry, mapMaterial);
+        mapMesh.renderOrder = 1;
+        mapMesh.position.set(origin.position.x / resolution + width / 2, origin.position.y / resolution + height / 2, 0);
+        scene.add(mapMesh);
+      }
+
+      const geometry_cube = new THREE.BoxGeometry(3, 3, 3);
+      const material_cube = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+      const cube_robot = new THREE.Mesh(geometry_cube, material_cube);
+      scene.add(cube_robot);
+
+      function updatePose(pose) {
+        const { x, y, z } = pose.pose.position;
+        const { x: qx, y: qy, z: qz, w: qw } = pose.pose.orientation;
+        cube_robot.position.set(x / mapres, y / mapres, z / mapres);
+        const euler = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(qx, qy, qz, qw));
+        cube_robot.rotation.set(euler.x, euler.y, euler.z);
+      }
+
+      ws.onopen = function () {
+        console.log("WebSocket connection opened");
+      };
+
+      ws.onmessage = function (event) {
+        const message = JSON.parse(event.data);
+        if (message.topic === "map") {
+          drawMap(message.data);
+        }
+        if (message.topic === "robot_pose_in_map") {
+          updatePose(message.data);
+        }
+        if (message.topic === "scan_pointcloud") {
+          var points = parsePointCloud2(message.data);
+          renderPointCloud(points);
+        }
+      };
+
+      ws.onclose = function () {
+        console.log("WebSocket connection closed");
+      };
+
+      function computeOuaternionFrom2Points(pStart, pEnd) {
+        const direction = new THREE.Vector3().subVectors(pStart, pEnd).normalize();
+        const quaternion = new THREE.Quaternion();
+        const direction_q = quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+        const rotationQuaternionz = new THREE.Quaternion();
+        rotationQuaternionz.setFromEuler(new THREE.Euler(0, 0, -Math.PI / 2));
+        const resultQuaternion = new THREE.Quaternion();
+        resultQuaternion.multiplyQuaternions(rotationQuaternionz, direction_q);
+        return resultQuaternion;
+      }
+
+      function getPoseFromArrow(arrow) {
+        const pose = {
+          position: { x: arrow.position.x, y: arrow.position.y, z: arrow.position.z },
+          orientation: { x: arrow.quaternion.x, y: arrow.quaternion.y, z: arrow.quaternion.z, w: arrow.quaternion.w }
         };
+        return pose;
+      }
 
-        ws.onmessage = function (event) {
-          const message = JSON.parse(event.data);
-          if (message.topic === "map") {
-            drawMap(message.data);
+      function createPoseArrayFromPoints(in_points) {
+        var poses = [];
+        for (const [idx, point] of in_points.entries()) {
+          if (idx < in_points.length - 2) {
+            const qq = computeOuaternionFrom2Points(point, in_points[idx + 1]);
+            const pose = {
+              position: { x: point.x * mapres, y: point.y * mapres, z: point.z * mapres },
+              orientation: { x: qq.x, y: qq.y, z: qq.z, w: qq.w }
+            };
+            poses.push(pose);
           }
-          if (message.topic === "robot_pose_in_map") {
-            updatePose(message.data);
-          }
-          if (message.topic === "scan_pointcloud") {
-            var points = parsePointCloud2(message.data);
-            renderPointCloud(points);
+        }
+        const pose = {
+          position: {
+            x: in_points[in_points.length - 1].x * mapres,
+            y: in_points[in_points.length - 1].y * mapres,
+            z: in_points[in_points.length - 1].z * mapres
+          },
+          orientation: {
+            x: poses[in_points.length - 3].orientation.x,
+            y: poses[in_points.length - 3].orientation.y,
+            z: poses[in_points.length - 3].orientation.z,
+            w: poses[in_points.length - 3].orientation.w
           }
         };
+        poses.push(pose);
+        return poses;
+      }
 
-        ws.onclose = function () {
-          console.log("WebSocket connection closed");
-        };
+      function getMousePosition(event) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        const mouse = new THREE.Vector2();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, camera);
+        const planeZ = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+        const intersectPoint = new THREE.Vector3();
+        raycaster.ray.intersectPlane(planeZ, intersectPoint);
+        return intersectPoint;
+      }
 
-        function computeOuaternionFrom2Points(pStart, pEnd) {
-          const direction = new THREE.Vector3().subVectors(pStart, pEnd).normalize();
-          const quaternion = new THREE.Quaternion();
-          const direction_q = quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
-          const rotationQuaternionz = new THREE.Quaternion();
-          rotationQuaternionz.setFromEuler(new THREE.Euler(0, 0, -Math.PI / 2));
-          const resultQuaternion = new THREE.Quaternion();
-          resultQuaternion.multiplyQuaternions(rotationQuaternionz, direction_q);
-          return resultQuaternion;
+      function createThickerArrow(start, end) {
+        const direction = new THREE.Vector3().subVectors(end, start).normalize();
+        const length = start.distanceTo(end);
+        const shaftGeometry = new THREE.CylinderGeometry(0.3, 0.3, length - 0.3, 32);
+        const shaftMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        const shaft = new THREE.Mesh(shaftGeometry, shaftMaterial);
+        shaft.position.copy(start).add(end).multiplyScalar(0.5);
+        shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+        const headGeometry = new THREE.ConeGeometry(0.5, 1.0, 32);
+        const headMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        const head = new THREE.Mesh(headGeometry, headMaterial);
+        head.position.copy(end);
+        head.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+        const arrow = new THREE.Group();
+        arrow.add(shaft);
+        arrow.add(head);
+        return arrow;
+      }
+
+      function createPolyline(pps) {
+        const geometry = new THREE.BufferGeometry().setFromPoints(pps);
+        const material = new THREE.LineBasicMaterial({ color: 0x0000ff });
+        const pline = new THREE.Line(geometry, material);
+        pline.renderOrder = 10;
+        return pline;
+      }
+
+      function pathfollowNav(pathtofollow) {
+        const payload = { type: "action", name: "pathfollow", data: pathtofollow };
+        ws.send(JSON.stringify(payload));
+      }
+
+      function startMinimal() {
+        const payload = { type: "process", name: "upstart" };
+        ws.send(JSON.stringify(payload));
+      }
+
+      function stopMinimal() {
+        const payload = { type: "process", name: "stop_upstart" };
+        ws.send(JSON.stringify(payload));
+      }
+
+      // Camera rotation functions
+      function rotateCamera(degrees) {
+        cameraRotationAngle += degrees;
+        const radians = cameraRotationAngle * Math.PI / 180;
+        camera.rotation.z = radians;
+      }
+
+      function resetCamera() {
+        cameraRotationAngle = 0;
+        // Keep current zoom (Z position) and pan (X, Y position)
+        const currentX = camera.position.x;
+        const currentY = camera.position.y;
+        const currentZ = camera.position.z;
+
+        // Reset all rotation components
+        camera.rotation.set(0, 0, 0);
+        camera.position.set(currentX, currentY, currentZ);
+        camera.up.set(0, 1, 0);
+      }
+
+      // Rotation button events
+      document.getElementById("rotate-cw").addEventListener("click", () => {
+        rotateCamera(-90);
+      });
+
+      document.getElementById("rotate-ccw").addEventListener("click", () => {
+        rotateCamera(90);
+      });
+
+      document.getElementById("rotate-reset").addEventListener("click", () => {
+        resetCamera();
+      });
+
+      // Mouse event handlers
+      let startPoint = null;
+      let arrowGroup = null;
+
+      mainCanvas.addEventListener("mousedown", (event) => {
+        // Pan mode: Ctrl + Left Click
+        if (event.ctrlKey && event.button === 0) {
+          isPanning = true;
+          previousMousePosition = { x: event.clientX, y: event.clientY };
+          container.classList.add('panning');
+          event.preventDefault();
+          return;
         }
 
-        function getPoseFromArrow(arrow) {
-          const pose = {
-            position: { x: arrow.position.x, y: arrow.position.y, z: arrow.position.z },
-            orientation: { x: arrow.quaternion.x, y: arrow.quaternion.y, z: arrow.quaternion.z, w: arrow.quaternion.w }
-          };
-          return pose;
+        // Existing functionality
+        if (enableNavToPose) {
+          startPoint = getMousePosition(event);
+        }
+        if (enableDrawLine) {
+          const intersects = getMousePosition(event);
+          const point = intersects;
+          points.push(new THREE.Vector3(point.x, point.y, point.z));
+          if (line) {
+            scene.remove(line);
+          }
+          line = createPolyline(points);
+          scene.add(line);
+        }
+      });
+
+      mainCanvas.addEventListener("mousemove", (event) => {
+        // Handle panning
+        // Handle panning
+        if (isPanning) {
+          const deltaX = event.clientX - previousMousePosition.x;
+          const deltaY = event.clientY - previousMousePosition.y;
+
+          // Calculate pan amount based on camera distance
+          const panSpeed = 0.5;
+
+          // Account for camera rotation when panning
+          const rotationRad = camera.rotation.z;
+          const cosRot = Math.cos(rotationRad);
+          const sinRot = Math.sin(rotationRad);
+
+          // Screen Movement to World Movement Conversion
+          // Screen X+ is Right. Screen Y+ is Down.
+          // World X+ is Right. World Y+ is Up.
+          const screenDX = deltaX;
+          const screenDY = -deltaY; // Invert Y because screen Y is down, world Y is up
+
+          // Rotate vector to align with world axes
+          const worldDX = screenDX * cosRot - screenDY * sinRot;
+          const worldDY = screenDX * sinRot + screenDY * cosRot;
+
+          // Move camera opposite to drag to pan the view
+          camera.position.x -= worldDX * panSpeed;
+          camera.position.y -= worldDY * panSpeed;
+
+          previousMousePosition = { x: event.clientX, y: event.clientY };
+          event.preventDefault();
+          return;
         }
 
-        function createPoseArrayFromPoints(in_points) {
-          var poses = [];
-          for (const [idx, point] of in_points.entries()) {
-            if (idx < in_points.length - 2) {
-              const qq = computeOuaternionFrom2Points(point, in_points[idx + 1]);
-              const pose = {
-                position: { x: point.x * mapres, y: point.y * mapres, z: point.z * mapres },
-                orientation: { x: qq.x, y: qq.y, z: qq.z, w: qq.w }
+        // Existing functionality
+        if (enableNavToPose) {
+          if (startPoint) {
+            const endPoint = getMousePosition(event);
+            if (endPoint) {
+              if (arrowGroup) {
+                scene.remove(arrowGroup);
+              }
+              arrowGroup = createThickerArrow(startPoint, endPoint);
+              const resultQuaternion = computeOuaternionFrom2Points(startPoint, endPoint);
+              arrowPose = {
+                position: { x: startPoint.x * mapres, y: startPoint.y * mapres, z: startPoint.z * mapres },
+                orientation: { x: resultQuaternion.x, y: resultQuaternion.y, z: resultQuaternion.z, w: resultQuaternion.w }
               };
-              poses.push(pose);
+              scene.add(arrowGroup);
             }
           }
-          const pose = {
-            position: {
-              x: in_points[in_points.length - 1].x * mapres,
-              y: in_points[in_points.length - 1].y * mapres,
-              z: in_points[in_points.length - 1].z * mapres
-            },
-            orientation: {
-              x: poses[in_points.length - 3].orientation.x,
-              y: poses[in_points.length - 3].orientation.y,
-              z: poses[in_points.length - 3].orientation.z,
-              w: poses[in_points.length - 3].orientation.w
-            }
-          };
-          poses.push(pose);
-          return poses;
         }
-
-        function getMousePosition(event) {
-          const rect = renderer.domElement.getBoundingClientRect();
-          const mouse = new THREE.Vector2();
-          mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-          mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-          const raycaster = new THREE.Raycaster();
-          raycaster.setFromCamera(mouse, camera);
-          const planeZ = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-          const intersectPoint = new THREE.Vector3();
-          raycaster.ray.intersectPlane(planeZ, intersectPoint);
-          return intersectPoint;
-        }
-
-        function createThickerArrow(start, end) {
-          const direction = new THREE.Vector3().subVectors(end, start).normalize();
-          const length = start.distanceTo(end);
-          const shaftGeometry = new THREE.CylinderGeometry(0.3, 0.3, length - 0.3, 32);
-          const shaftMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-          const shaft = new THREE.Mesh(shaftGeometry, shaftMaterial);
-          shaft.position.copy(start).add(end).multiplyScalar(0.5);
-          shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
-          const headGeometry = new THREE.ConeGeometry(0.5, 1.0, 32);
-          const headMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-          const head = new THREE.Mesh(headGeometry, headMaterial);
-          head.position.copy(end);
-          head.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
-          const arrow = new THREE.Group();
-          arrow.add(shaft);
-          arrow.add(head);
-          return arrow;
-        }
-
-        function createPolyline(pps) {
-          const geometry = new THREE.BufferGeometry().setFromPoints(pps);
-          const material = new THREE.LineBasicMaterial({ color: 0x0000ff });
-          const pline = new THREE.Line(geometry, material);
-          pline.renderOrder = 10;
-          return pline;
-        }
-
-        function pathfollowNav(pathtofollow) {
-          const payload = { type: "action", name: "pathfollow", data: pathtofollow };
-          ws.send(JSON.stringify(payload));
-        }
-
-        function startMinimal() {
-          const payload = { type: "process", name: "upstart" };
-          ws.send(JSON.stringify(payload));
-        }
-
-        function stopMinimal() {
-          const payload = { type: "process", name: "stop_upstart" };
-          ws.send(JSON.stringify(payload));
-        }
-
-        // Camera rotation functions
-        function rotateCamera(degrees) {
-          cameraRotationAngle += degrees;
-          const radians = cameraRotationAngle * Math.PI / 180;
-          camera.rotation.z = radians;
-        }
-
-        function resetCamera() {
-          cameraRotationAngle = 0;
-          // Keep current zoom (Z position) and pan (X, Y position)
-          const currentX = camera.position.x;
-          const currentY = camera.position.y;
-          const currentZ = camera.position.z;
-          
-          // Reset all rotation components
-          camera.rotation.set(0, 0, 0);
-          camera.position.set(currentX, currentY, currentZ);
-          camera.up.set(0, 1, 0);
-        }
-
-        // Rotation button events
-        document.getElementById("rotate-cw").addEventListener("click", () => {
-          rotateCamera(-90);
-        });
-
-        document.getElementById("rotate-ccw").addEventListener("click", () => {
-          rotateCamera(90);
-        });
-
-        document.getElementById("rotate-reset").addEventListener("click", () => {
-          resetCamera();
-        });
-
-        // Mouse event handlers
-        let startPoint = null;
-        let arrowGroup = null;
-
-        mainCanvas.addEventListener("mousedown", (event) => {
-          // Pan mode: Ctrl + Left Click
-          if (event.ctrlKey && event.button === 0) {
-            isPanning = true;
-            previousMousePosition = { x: event.clientX, y: event.clientY };
-            container.classList.add('panning');
-            event.preventDefault();
-            return;
-          }
-
-          // Existing functionality
-          if (enableNavToPose) {
-            startPoint = getMousePosition(event);
-          }
-          if (enableDrawLine) {
+        if (enableDrawLine) {
+          if (points.length > 0) {
             const intersects = getMousePosition(event);
-            const point = intersects;
-            points.push(new THREE.Vector3(point.x, point.y, point.z));
-            if (line) {
-              scene.remove(line);
-            }
-            line = createPolyline(points);
-            scene.add(line);
-          }
-        });
-
-        mainCanvas.addEventListener("mousemove", (event) => {
-          // Handle panning
-          if (isPanning) {
-            const deltaX = event.clientX - previousMousePosition.x;
-            const deltaY = event.clientY - previousMousePosition.y;
-
-            // Calculate pan amount based on camera distance
-            const panSpeed = 0.5;
-            
-            // Account for camera rotation when panning
-            const rotationRad = cameraRotationAngle * Math.PI / 180;
-            const cosRot = Math.cos(rotationRad);
-            const sinRot = Math.sin(rotationRad);
-            
-            // Transform pan deltas based on rotation
-            const rotatedDeltaX = deltaX * cosRot - deltaY * sinRot;
-            const rotatedDeltaY = deltaX * sinRot + deltaY * cosRot;
-            
-            camera.position.x -= rotatedDeltaX * panSpeed;
-            camera.position.y += rotatedDeltaY * panSpeed;
-
-            previousMousePosition = { x: event.clientX, y: event.clientY };
-            event.preventDefault();
-            return;
-          }
-
-          // Existing functionality
-          if (enableNavToPose) {
-            if (startPoint) {
-              const endPoint = getMousePosition(event);
-              if (endPoint) {
-                if (arrowGroup) {
-                  scene.remove(arrowGroup);
-                }
-                arrowGroup = createThickerArrow(startPoint, endPoint);
-                const resultQuaternion = computeOuaternionFrom2Points(startPoint, endPoint);
-                arrowPose = {
-                  position: { x: startPoint.x * mapres, y: startPoint.y * mapres, z: startPoint.z * mapres },
-                  orientation: { x: resultQuaternion.x, y: resultQuaternion.y, z: resultQuaternion.z, w: resultQuaternion.w }
-                };
-                scene.add(arrowGroup);
-              }
-            }
-          }
-          if (enableDrawLine) {
-            if (points.length > 0) {
-              const intersects = getMousePosition(event);
-              const p1 = new THREE.Vector3(points[points.length - 1].x, points[points.length - 1].y, points[points.length - 1].z);
-              const p2 = new THREE.Vector3(intersects.x, intersects.y, intersects.z);
-              const line_cursor_p = [p1, p2];
-              if (line_cursor) {
-                scene.remove(line_cursor);
-              }
-              const geometry = new THREE.BufferGeometry().setFromPoints(line_cursor_p);
-              const material = new THREE.LineBasicMaterial({ color: 0x3300ff });
-              line_cursor = new THREE.Line(geometry, material);
-              line_cursor.renderOrder = 11;
-              scene.add(line_cursor);
-            }
-          }
-        });
-
-        mainCanvas.addEventListener("mouseup", (event) => {
-          // Stop panning
-          if (isPanning) {
-            isPanning = false;
-            container.classList.remove('panning');
-            return;
-          }
-
-          // Existing functionality
-          startPoint = null;
-          if (enableNavToPose) {
-            if (arrowGroup) {
-              const payload = { type: "action", name: "navtopose", data: arrowPose };
-              ws.send(JSON.stringify(payload));
-              enableNavToPose = false;
-            }
-          }
-          if (enableDrawLine) {
+            const p1 = new THREE.Vector3(points[points.length - 1].x, points[points.length - 1].y, points[points.length - 1].z);
+            const p2 = new THREE.Vector3(intersects.x, intersects.y, intersects.z);
+            const line_cursor_p = [p1, p2];
             if (line_cursor) {
               scene.remove(line_cursor);
             }
+            const geometry = new THREE.BufferGeometry().setFromPoints(line_cursor_p);
+            const material = new THREE.LineBasicMaterial({ color: 0x3300ff });
+            line_cursor = new THREE.Line(geometry, material);
+            line_cursor.renderOrder = 11;
+            scene.add(line_cursor);
           }
-        });
+        }
+      });
 
-        // Zoom with mouse wheel
-        mainCanvas.addEventListener("wheel", (event) => {
-          event.preventDefault();
-          const zoomSpeed = 10;
-          camera.position.z += event.deltaY * zoomSpeed * 0.01;
-          camera.position.z = Math.max(50, Math.min(1000, camera.position.z));
-        });
+      mainCanvas.addEventListener("mouseup", (event) => {
+        // Stop panning
+        if (isPanning) {
+          isPanning = false;
+          container.classList.remove('panning');
+          return;
+        }
 
-        const contextMenu = document.getElementById("context-menu");
-        renderer.domElement.addEventListener("contextmenu", (event) => {
-          event.preventDefault();
-          if (isPanning || event.ctrlKey) {
-            return;
+        // Existing functionality
+        startPoint = null;
+        if (enableNavToPose) {
+          if (arrowGroup) {
+            const payload = { type: "action", name: "navtopose", data: arrowPose };
+            ws.send(JSON.stringify(payload));
+            enableNavToPose = false;
           }
-          contextMenu.style.display = "block";
-          contextMenu.style.left = `${event.clientX}px`;
-          contextMenu.style.top = `${event.clientY}px`;
-        });
+        }
+        if (enableDrawLine) {
+          if (line_cursor) {
+            scene.remove(line_cursor);
+          }
+        }
+      });
 
-        document.addEventListener("click", () => {
-          contextMenu.style.display = "none";
-        });
+      // Zoom with mouse wheel
+      mainCanvas.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        const zoomSpeed = 10;
+        camera.position.z += event.deltaY * zoomSpeed * 0.01;
+        camera.position.z = Math.max(50, Math.min(1000, camera.position.z));
+      });
 
-        document.getElementById("end").addEventListener("click", () => {
+      const contextMenu = document.getElementById("context-menu");
+      renderer.domElement.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        if (isPanning || event.ctrlKey) {
+          return;
+        }
+        contextMenu.style.display = "block";
+        contextMenu.style.left = `${event.clientX}px`;
+        contextMenu.style.top = `${event.clientY}px`;
+      });
+
+      document.addEventListener("click", () => {
+        contextMenu.style.display = "none";
+      });
+
+      document.getElementById("end").addEventListener("click", () => {
+        if (enableDrawLine) {
+          if (line_cursor) {
+            scene.remove(line_cursor);
+          }
+          enableDrawLine = false;
+        }
+        contextMenu.style.display = "none";
+      });
+
+      function animate() {
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      camera.position.set(0, 0, 500);
+
+      window.addEventListener("resize", () => {
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+      });
+
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" || event.keyCode === 27) {
           if (enableDrawLine) {
             if (line_cursor) {
               scene.remove(line_cursor);
             }
             enableDrawLine = false;
           }
-          contextMenu.style.display = "none";
-        });
-
-        function animate() {
-          requestAnimationFrame(animate);
-          renderer.render(scene, camera);
         }
-        animate();
+      });
 
-        camera.position.set(0, 0, 500);
-
-        window.addEventListener("resize", () => {
-          renderer.setSize(container.clientWidth, container.clientHeight);
-          camera.aspect = container.clientWidth / container.clientHeight;
-          camera.updateProjectionMatrix();
-        });
-
-        document.addEventListener("keydown", function (event) {
-          if (event.key === "Escape" || event.keyCode === 27) {
-            if (enableDrawLine) {
-              if (line_cursor) {
-                scene.remove(line_cursor);
-              }
+      document.querySelectorAll(".menu-btn").forEach((button) => {
+        button.addEventListener("click", function () {
+          const action = this.getAttribute("data-action");
+          switch (action) {
+            case "navtopose":
+              if (line_cursor) scene.remove(line_cursor);
+              enableNavToPose = true;
               enableDrawLine = false;
-            }
+              enablePathFollow = false;
+              break;
+            case "drawpath":
+              if (line_cursor) scene.remove(line_cursor);
+              if (line) {
+                scene.remove(line);
+                points.length = 0;
+              }
+              enableNavToPose = false;
+              enableDrawLine = true;
+              enablePathFollow = false;
+              break;
+            case "pathfollow":
+              if (line_cursor) scene.remove(line_cursor);
+              enableNavToPose = false;
+              enableDrawLine = false;
+              enablePathFollow = true;
+              const poses = createPoseArrayFromPoints(points);
+              pathfollowNav(poses);
+              break;
+            case "startminimal":
+              startMinimal();
+              break;
+            case "stopminimal":
+              stopMinimal();
+              break;
+            case "none":
+              if (line_cursor) scene.remove(line_cursor);
+              enableNavToPose = false;
+              enableDrawLine = false;
+              enablePathFollow = false;
+              break;
           }
         });
+      });
+    }
 
-        document.querySelectorAll(".menu-btn").forEach((button) => {
-          button.addEventListener("click", function () {
-            const action = this.getAttribute("data-action");
-            switch (action) {
-              case "navtopose":
-                if (line_cursor) scene.remove(line_cursor);
-                enableNavToPose = true;
-                enableDrawLine = false;
-                enablePathFollow = false;
-                break;
-              case "drawpath":
-                if (line_cursor) scene.remove(line_cursor);
-                if (line) {
-                  scene.remove(line);
-                  points.length = 0;
-                }
-                enableNavToPose = false;
-                enableDrawLine = true;
-                enablePathFollow = false;
-                break;
-              case "pathfollow":
-                if (line_cursor) scene.remove(line_cursor);
-                enableNavToPose = false;
-                enableDrawLine = false;
-                enablePathFollow = true;
-                const poses = createPoseArrayFromPoints(points);
-                pathfollowNav(poses);
-                break;
-              case "startminimal":
-                startMinimal();
-                break;
-              case "stopminimal":
-                stopMinimal();
-                break;
-              case "none":
-                if (line_cursor) scene.remove(line_cursor);
-                enableNavToPose = false;
-                enableDrawLine = false;
-                enablePathFollow = false;
-                break;
-            }
-          });
-        });
-      }
+    document.addEventListener("DOMContentLoaded", initThreeJS);
+  </script>
+</body>
 
-      document.addEventListener("DOMContentLoaded", initThreeJS);
-    </script>
-  </body>
 </html>
