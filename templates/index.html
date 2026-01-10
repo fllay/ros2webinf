@@ -102,13 +102,16 @@
     }
 
     .inner-col-left {
-      flex: 1;
-      padding: 10px;
+      flex: 3;
+      padding: 5px;
       background-color: #a5d6a7;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
     .inner-col-right {
-      flex: 1;
+      flex: 5;
       padding: 10px;
       background-color: #90caf9;
     }
@@ -128,10 +131,18 @@
     .rotation-btn {
       background-color: #1976d2 !important;
       color: white;
-      flex: 1;
-      min-width: 60px;
-      font-size: 11px;
-      padding: 8px 4px !important;
+      width: 45px !important;
+      height: 45px !important;
+      min-width: unset !important;
+      font-size: 9px;
+      padding: 0 !important;
+      display: flex !important;
+      justify-content: center;
+      align-items: center;
+      border-radius: 4px;
+      line-height: 1.1;
+      text-align: center;
+      margin: 0 auto;
     }
 
     .rotation-btn:hover {
