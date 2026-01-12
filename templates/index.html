@@ -45,6 +45,11 @@
             <p>Content here.</p>
             <a href="#!" class="btn menu-btn btn-small" data-action="startminimal">Upstart</a>
             <a href="#!" class="btn menu-btn btn-small" data-action="stopminimal">Stop</a>
+            <div style="margin-top: 10px;"></div>
+            <a href="#!" class="btn menu-btn btn-small" data-action="startslam"
+              style="background-color: #7e57c2 !important;">SLAM Nav</a>
+            <a href="#!" class="btn menu-btn btn-small" data-action="stopslam"
+              style="background-color: #ef5350 !important;">Stop SLAM</a>
           </div>
         </div>
       </div>
@@ -762,6 +767,12 @@
               break;
             case "stopminimal":
               stopMinimal();
+              break;
+            case "startslam":
+              startSlam();
+              break;
+            case "stopslam":
+              stopSlam();
               break;
             case "none":
               if (line_cursor) scene.remove(line_cursor);

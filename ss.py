@@ -472,6 +472,11 @@ class WebSocketROS2Bridge(Node):
                         self.start_launch("minimal", launch_file_1)
                     if(json_dada['name'] == "stop_upstart"):
                         self.stop_launch('minimal')
+                    if(json_dada['name'] == "start_slam"):
+                        launch_file_2 = os.path.join(os.getcwd(), 'slam_async_nav.py')
+                        self.start_launch("slam_nav", launch_file_2)
+                    if(json_dada['name'] == "stop_slam"):
+                        self.stop_launch('slam_nav')
 
                 
         except websockets.ConnectionClosed:
