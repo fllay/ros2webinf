@@ -1,5 +1,6 @@
 import rclpy
 import os
+import subprocess
 from rclpy.node import Node
 from nav_msgs.msg import OccupancyGrid
 import asyncio
@@ -517,7 +518,7 @@ class WebSocketROS2Bridge(Node):
         return json.dumps(msg_with_topic)
 
     def start_launch(self, launch_name, launch_file_path):
-        """Start a launch file."""
+        """Start a launch file using subprocess."""
         if launch_name in self.launch_services:
             self.get_logger().warn(f"Launch '{launch_name}' is already running.")
             return
@@ -527,27 +528,16 @@ class WebSocketROS2Bridge(Node):
             return
 
         try:
-            # Create LaunchService and include launch description
-            launch_service = LaunchService()
-            launch_description = IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(launch_file_path)
-            )
-            launch_service.include_launch_description(launch_description)
-
-            # Start the launch service
-            self.launch_services[launch_name] = launch_service
-            self.launch_tasks[launch_name] = asyncio.create_task(self.run_launch_service(launch_name, launch_service))
-
+            # Use subprocess to start the launch file externally
+            # This avoids the 'main thread' requirement of LaunchService
+            cmd = ['ros2', 'launch', launch_file_path]
+            process = subprocess.Popen(cmd)
+            
+            self.launch_services[launch_name] = process
             self.get_logger().info(f"Started launch file '{launch_name}': {launch_file_path}")
+            
         except Exception as e:
             self.get_logger().error(f"Failed to start launch file '{launch_name}': {e}")
-
-    async def run_launch_service(self, launch_name, launch_service):
-        """Run LaunchService asynchronously."""
-        try:
-            await asyncio.to_thread(launch_service.run)
-        except Exception as e:
-            self.get_logger().error(f"Error in launch service '{launch_name}': {e}")
 
     def stop_launch(self, launch_name):
         """Stop a running launch file."""
@@ -556,10 +546,15 @@ class WebSocketROS2Bridge(Node):
             return
 
         try:
-            self.launch_services[launch_name].shutdown()
-            self.launch_tasks[launch_name].cancel()
+            process = self.launch_services[launch_name]
+            process.terminate()
+            # Optionally wait for it to cleanly exit, but don't block too long
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+            
             del self.launch_services[launch_name]
-            del self.launch_tasks[launch_name]
             self.get_logger().info(f"Stopped launch file '{launch_name}'.")
         except Exception as e:
             self.get_logger().error(f"Failed to stop launch file '{launch_name}': {e}")
