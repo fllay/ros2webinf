@@ -1,6 +1,7 @@
 import rclpy
 import os
 import subprocess
+import signal
 from rclpy.node import Node
 from nav_msgs.msg import OccupancyGrid
 import asyncio
@@ -530,8 +531,9 @@ class WebSocketROS2Bridge(Node):
         try:
             # Use subprocess to start the launch file externally
             # This avoids the 'main thread' requirement of LaunchService
+            # start_new_session=True creates a new process group (Python 3.2+)
             cmd = ['ros2', 'launch', launch_file_path]
-            process = subprocess.Popen(cmd)
+            process = subprocess.Popen(cmd, preexec_fn=os.setsid)
             
             self.launch_services[launch_name] = process
             self.get_logger().info(f"Started launch file '{launch_name}': {launch_file_path}")
@@ -547,12 +549,14 @@ class WebSocketROS2Bridge(Node):
 
         try:
             process = self.launch_services[launch_name]
-            process.terminate()
+            # Send SIGTERM to the entire process group ensures child nodes are also killed
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            
             # Optionally wait for it to cleanly exit, but don't block too long
             try:
                 process.wait(timeout=2)
             except subprocess.TimeoutExpired:
-                process.kill()
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
             
             del self.launch_services[launch_name]
             self.get_logger().info(f"Stopped launch file '{launch_name}'.")
