@@ -496,6 +496,7 @@
         if (ws.readyState === WebSocket.OPEN) {
           const payload = { type: "process", name: "upstart" };
           ws.send(JSON.stringify(payload));
+          M.toast({ html: 'Start command sent!', classes: 'green' });
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -506,6 +507,7 @@
         if (ws.readyState === WebSocket.OPEN) {
           const payload = { type: "process", name: "stop_upstart" };
           ws.send(JSON.stringify(payload));
+          M.toast({ html: 'Stop command sent!', classes: 'orange' });
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
