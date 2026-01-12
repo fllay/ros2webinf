@@ -466,7 +466,7 @@ class WebSocketROS2Bridge(Node):
                         pass
                 elif(json_dada['type'] == "process"):
                     if(json_dada['name'] == "upstart"):
-                        launch_file_1 = "/home/pi/minimal.py"
+                        launch_file_1 = os.path.join(os.getcwd(), 'minimal.py')
                         self.start_launch("minimal", launch_file_1)
                     if(json_dada['name'] == "stop_upstart"):
                         self.stop_launch('minimal')

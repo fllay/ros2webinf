@@ -202,7 +202,10 @@
   </style>
 
   <script>
-    const ws = new WebSocket("ws://192.168.68.36:8888");
+    // Use the current hostname for the WebSocket connection
+    const wsHost = window.location.hostname;
+    // Default to port 8888 as per ss.py
+    const ws = new WebSocket(`ws://${wsHost}:8888`);
     var mapres = 0;
 
     function initThreeJS() {
@@ -490,13 +493,23 @@
       }
 
       function startMinimal() {
-        const payload = { type: "process", name: "upstart" };
-        ws.send(JSON.stringify(payload));
+        if (ws.readyState === WebSocket.OPEN) {
+          const payload = { type: "process", name: "upstart" };
+          ws.send(JSON.stringify(payload));
+        } else {
+          console.error("WebSocket is not connected. State:", ws.readyState);
+          alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
+        }
       }
 
       function stopMinimal() {
-        const payload = { type: "process", name: "stop_upstart" };
-        ws.send(JSON.stringify(payload));
+        if (ws.readyState === WebSocket.OPEN) {
+          const payload = { type: "process", name: "stop_upstart" };
+          ws.send(JSON.stringify(payload));
+        } else {
+          console.error("WebSocket is not connected. State:", ws.readyState);
+          alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
+        }
       }
 
       // Camera rotation functions
