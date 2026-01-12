@@ -519,6 +519,28 @@
         }
       }
 
+      function startSlam() {
+        if (ws.readyState === WebSocket.OPEN) {
+          const payload = { type: "process", name: "start_slam" };
+          ws.send(JSON.stringify(payload));
+          M.toast({ html: 'SLAM Start command sent!', classes: 'green' });
+        } else {
+          console.error("WebSocket is not connected. State:", ws.readyState);
+          alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
+        }
+      }
+
+      function stopSlam() {
+        if (ws.readyState === WebSocket.OPEN) {
+          const payload = { type: "process", name: "stop_slam" };
+          ws.send(JSON.stringify(payload));
+          M.toast({ html: 'SLAM Stop command sent!', classes: 'orange' });
+        } else {
+          console.error("WebSocket is not connected. State:", ws.readyState);
+          alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
+        }
+      }
+
       // Camera rotation functions
       function rotateCamera(degrees) {
         cameraRotationAngle += degrees;
