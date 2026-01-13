@@ -554,8 +554,8 @@ class WebSocketROS2Bridge(Node):
 
         try:
             process = self.launch_services[launch_name]
-            # Send SIGTERM to the entire process group ensures child nodes are also killed
-            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            # Send SIGINT to the entire process group mimicing Ctrl-C
+            os.killpg(os.getpgid(process.pid), signal.SIGINT)
             
             # Optionally wait for it to cleanly exit, but don't block too long
             try:
