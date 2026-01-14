@@ -369,17 +369,18 @@
         scene.add(mapMesh);
       }
 
-      const geometry_cube = new THREE.BoxGeometry(3, 3, 3);
-      const material_cube = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-      const cube_robot = new THREE.Mesh(geometry_cube, material_cube);
-      scene.add(cube_robot);
+      const geometry_robot = new THREE.ConeGeometry(2, 6, 32);
+      geometry_robot.rotateZ(-Math.PI / 2); // Point towards +X
+      const material_robot = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+      const robot_mesh = new THREE.Mesh(geometry_robot, material_robot);
+      scene.add(robot_mesh);
 
       function updatePose(pose) {
         const { x, y, z } = pose.pose.position;
         const { x: qx, y: qy, z: qz, w: qw } = pose.pose.orientation;
-        cube_robot.position.set(x / mapres, y / mapres, z / mapres);
+        robot_mesh.position.set(x / mapres, y / mapres, z / mapres);
         const euler = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(qx, qy, qz, qw));
-        cube_robot.rotation.set(euler.x, euler.y, euler.z);
+        robot_mesh.rotation.set(euler.x, euler.y, euler.z);
       }
 
       ws.onopen = function () {
