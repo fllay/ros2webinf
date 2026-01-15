@@ -63,6 +63,9 @@
             </div>
 
             <div style="margin-top: 10px;"></div>
+            <a href="#!" class="btn menu-btn btn-small btn-red disabled" data-action="deletemap">Delete Map</a>
+
+            <div style="margin-top: 10px;"></div>
             <a href="#!" class="btn menu-btn btn-small btn-teal" data-action="startnav">Start Nav</a>
             <a href="#!" class="btn menu-btn btn-small btn-pink" data-action="stopnav">Stop Nav</a>
           </div>
@@ -465,6 +468,8 @@
 
       function updateMapList(maps) {
         const list = document.getElementById("map-list");
+        const deleteBtn = document.querySelector('[data-action="deletemap"]');
+
         list.innerHTML = "";
         maps.forEach(mapName => {
           const li = document.createElement("li");
@@ -479,11 +484,22 @@
             // Highlight current
             li.style.backgroundColor = "#e0e0e0";
             selectedMap = mapName;
+
+            // Enable delete button
+            if (deleteBtn) {
+              deleteBtn.classList.remove('disabled');
+            }
+
             M.toast({ html: `Selected map: ${mapName}`, classes: 'rounded' });
           };
 
           list.appendChild(li);
         });
+
+        // If no map selected, ensure delete button is disabled
+        if (!selectedMap && deleteBtn) {
+          deleteBtn.classList.add('disabled');
+        }
       }
 
       function drawMap(message) {
@@ -801,6 +817,31 @@
         }
       }
 
+      function deleteMap() {
+        if (ws.readyState === WebSocket.OPEN) {
+          if (!selectedMap) {
+            alert("Please select a map to delete first!");
+            return;
+          }
+
+          if (confirm(`Are you sure you want to delete the map "${selectedMap}"? This cannot be undone.`)) {
+            const payload = { type: "process", name: "delete_map", data: selectedMap };
+            ws.send(JSON.stringify(payload));
+            M.toast({ html: `Deleting map: ${selectedMap}`, classes: 'red' });
+
+            // Clear selection
+            selectedMap = null;
+            const deleteBtn = document.querySelector('[data-action="deletemap"]');
+            if (deleteBtn) {
+              deleteBtn.classList.add('disabled');
+            }
+          }
+        } else {
+          console.error("WebSocket is not connected. State:", ws.readyState);
+          alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
+        }
+      }
+
       // Camera rotation functions
       function rotateCamera(degrees) {
         cameraRotationAngle += degrees;
@@ -1081,6 +1122,9 @@
               break;
             case "stopnav":
               stopNav();
+              break;
+            case "deletemap":
+              deleteMap();
               break;
             case "none":
               if (line_cursor) scene.remove(line_cursor);

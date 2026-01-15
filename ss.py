@@ -546,6 +546,23 @@ class WebSocketROS2Bridge(Node):
                             self.start_launch("nav_stack", launch_file_nav, args=[map_arg])
                     if(json_dada['name'] == "stop_nav"):
                         self.stop_launch('nav_stack')
+                    if(json_dada['name'] == "delete_map"):
+                        map_name = json_dada.get('data', '')
+                        if map_name:
+                            map_yaml = os.path.join(self.map_save_path, f"{map_name}.yaml")
+                            map_pgm = os.path.join(self.map_save_path, f"{map_name}.pgm")
+                            try:
+                                # Delete both files
+                                if os.path.exists(map_yaml):
+                                    os.remove(map_yaml)
+                                    print(f"Deleted {map_yaml}")
+                                if os.path.exists(map_pgm):
+                                    os.remove(map_pgm)
+                                    print(f"Deleted {map_pgm}")
+                                # Update map list
+                                asyncio.create_task(self.delayed_map_list_update())
+                            except Exception as e:
+                                print(f"Error deleting map {map_name}: {e}")
 
                 
         except websockets.ConnectionClosed:
