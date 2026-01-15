@@ -514,7 +514,8 @@ class WebSocketROS2Bridge(Node):
                     if(json_dada['name'] == "save_map"):
                         map_name = json_dada.get('data', 'my_map')
                         map_path = os.path.join(self.map_save_path, map_name)
-                        cmd = ['ros2', 'run', 'nav2_map_server', 'map_saver_cli', '-f', map_path]
+                        # Use --free 0.15 to ensure unknown space (approx 0.196) is not classified as free (0.25 default)
+                        cmd = ['ros2', 'run', 'nav2_map_server', 'map_saver_cli', '-f', map_path, '--free', '0.15']
                         try:
                             subprocess.Popen(cmd)
                             print(f"Saving map to {map_path}")
