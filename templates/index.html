@@ -686,10 +686,16 @@
 
       function startMinimal() {
         if (ws.readyState === WebSocket.OPEN) {
-          // showLoading("Starting Upstart...");
           const payload = { type: "process", name: "upstart" };
           ws.send(JSON.stringify(payload));
           M.toast({ html: 'Start command sent!', classes: 'green' });
+
+          // Update state after 5 seconds
+          isMinimalRunning = true;
+          updateButtonStates();
+          setTimeout(() => {
+            // Keep as running (don't auto-revert)
+          }, 5000);
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -698,10 +704,15 @@
 
       function stopMinimal() {
         if (ws.readyState === WebSocket.OPEN) {
-          // showLoading("Stopping Upstart...");
           const payload = { type: "process", name: "stop_upstart" };
           ws.send(JSON.stringify(payload));
           M.toast({ html: 'Stop command sent!', classes: 'orange' });
+
+          // Update state after 5 seconds
+          setTimeout(() => {
+            isMinimalRunning = false;
+            updateButtonStates();
+          }, 5000);
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -710,10 +721,13 @@
 
       function startSlam() {
         if (ws.readyState === WebSocket.OPEN) {
-          // showLoading("Starting SLAM...");
           const payload = { type: "process", name: "start_slam" };
           ws.send(JSON.stringify(payload));
           M.toast({ html: 'SLAM Start command sent!', classes: 'green' });
+
+          // Update state immediately
+          isSlamRunning = true;
+          updateButtonStates();
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -722,10 +736,15 @@
 
       function stopSlam() {
         if (ws.readyState === WebSocket.OPEN) {
-          // showLoading("Stopping SLAM...");
           const payload = { type: "process", name: "stop_slam" };
           ws.send(JSON.stringify(payload));
           M.toast({ html: 'SLAM Stop command sent!', classes: 'orange' });
+
+          // Update state after 5 seconds
+          setTimeout(() => {
+            isSlamRunning = false;
+            updateButtonStates();
+          }, 5000);
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -736,7 +755,6 @@
         if (ws.readyState === WebSocket.OPEN) {
           const mapName = prompt("Enter map name to save:", "my_new_map");
           if (mapName) {
-            // showLoading(`Saving map ${mapName}...`);
             const payload = { type: "process", name: "save_map", data: mapName };
             ws.send(JSON.stringify(payload));
             M.toast({ html: `Saving map as ${mapName}...`, classes: 'blue' });
@@ -753,10 +771,13 @@
             alert("Please select a map from the list first!");
             return;
           }
-          // showLoading(`Starting Nav with ${selectedMap}...`);
           const payload = { type: "process", name: "start_nav", data: selectedMap };
           ws.send(JSON.stringify(payload));
           M.toast({ html: `Starting navigation with map: ${selectedMap}`, classes: 'green' });
+
+          // Update state immediately
+          isNavRunning = true;
+          updateButtonStates();
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -765,10 +786,15 @@
 
       function stopNav() {
         if (ws.readyState === WebSocket.OPEN) {
-          // showLoading("Stopping Nav...");
           const payload = { type: "process", name: "stop_nav" };
           ws.send(JSON.stringify(payload));
           M.toast({ html: 'Stopping navigation...', classes: 'orange' });
+
+          // Update state after 5 seconds
+          setTimeout(() => {
+            isNavRunning = false;
+            updateButtonStates();
+          }, 5000);
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
