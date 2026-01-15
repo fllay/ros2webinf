@@ -48,16 +48,13 @@
           <div class="inner-col-right">
             <h6>Additional</h6>
             <p>Content here.</p>
-            <a href="#!" class="btn menu-btn btn-small" data-action="startminimal">Upstart</a>
-            <a href="#!" class="btn menu-btn btn-small" data-action="stopminimal">Stop</a>
+            <a href="#!" class="btn menu-btn btn-small btn-green" data-action="startminimal">Upstart</a>
+            <a href="#!" class="btn menu-btn btn-small btn-red" data-action="stopminimal">Stop</a>
             <div style="margin-top: 10px;"></div>
-            <a href="#!" class="btn menu-btn btn-small" data-action="startslam"
-              style="background-color: #7e57c2 !important;">SLAM Nav</a>
-            <a href="#!" class="btn menu-btn btn-small" data-action="stopslam"
-              style="background-color: #ef5350 !important;">Stop SLAM</a>
+            <a href="#!" class="btn menu-btn btn-small btn-purple" data-action="startslam">SLAM Nav</a>
+            <a href="#!" class="btn menu-btn btn-small btn-red" data-action="stopslam">Stop SLAM</a>
             <div style="margin-top: 10px;"></div>
-            <a href="#!" class="btn menu-btn btn-small" data-action="savemap"
-              style="background-color: #ff9800 !important;">Save Map</a>
+            <a href="#!" class="btn menu-btn btn-small btn-orange" data-action="savemap">Save Map</a>
 
             <div id="map-list-container"
               style="max-height: 200px; overflow-y: auto; margin-top: 15px; background: white; padding: 5px; border-radius: 4px;">
@@ -66,10 +63,8 @@
             </div>
 
             <div style="margin-top: 10px;"></div>
-            <a href="#!" class="btn menu-btn btn-small" data-action="startnav"
-              style="background-color: #00897b !important;">Start Nav</a>
-            <a href="#!" class="btn menu-btn btn-small" data-action="stopnav"
-              style="background-color: #d81b60 !important;">Stop Nav</a>
+            <a href="#!" class="btn menu-btn btn-small btn-teal" data-action="startnav">Start Nav</a>
+            <a href="#!" class="btn menu-btn btn-small btn-pink" data-action="stopnav">Stop Nav</a>
           </div>
         </div>
       </div>
@@ -1071,6 +1066,9 @@
           }
         });
       });
+
+      // Initialize button states
+      updateButtonStates();
     }
 
     document.addEventListener("DOMContentLoaded", initThreeJS);
