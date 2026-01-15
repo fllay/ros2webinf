@@ -168,8 +168,37 @@ class WebSocketROS2Bridge(Node):
 
         self.navpose_action_client.wait_for_server()
 
-        self._send_goal_future = self.navpose_action_client.send_goal_async(goal_msg)
+        self._send_goal_future = self.navpose_action_client.send_goal_async(
+            goal_msg, 
+            feedback_callback=self.nav_feedback_callback
+        )
         self._send_goal_future.add_done_callback(self.goal_response_callback)
+
+    def nav_feedback_callback(self, feedback_msg):
+        """Handle navigation feedback and broadcast to WebSocket clients"""
+        feedback = feedback_msg.feedback
+        
+        # Prepare feedback data
+        feedback_data = {
+            "type": "nav_feedback",
+            "data": {
+                "distance_remaining": feedback.distance_remaining if hasattr(feedback, 'distance_remaining') else None,
+                "navigation_time": {
+                    "sec": feedback.navigation_time.sec if hasattr(feedback, 'navigation_time') else 0
+                } if hasattr(feedback, 'navigation_time') else None,
+                "current_pose": {
+                    "pose": {
+                        "position": {
+                            "x": feedback.current_pose.pose.position.x if hasattr(feedback, 'current_pose') else 0,
+                            "y": feedback.current_pose.pose.position.y if hasattr(feedback, 'current_pose') else 0,
+                        }
+                    }
+                } if hasattr(feedback, 'current_pose') else None
+            }
+        }
+        
+        # Broadcast to all WebSocket clients
+        asyncio.run(self.send_data_to_clients(json.dumps(feedback_data)))
 
     def send_goal_path(self, goal_path: FollowPath):
 
@@ -190,6 +219,12 @@ class WebSocketROS2Bridge(Node):
 
         if not goal_handle.accepted:
             self.get_logger().info('Goal rejected.')
+            # Broadcast rejection
+            asyncio.run(self.send_data_to_clients(json.dumps({
+                "type": "nav_result",
+                "success": False,
+                "error": "Goal rejected by navigation server"
+            })))
             return
 
         self.get_logger().info('Goal accepted.')
@@ -198,7 +233,22 @@ class WebSocketROS2Bridge(Node):
 
     def get_result_callback(self, future: Future):
         result = future.result().result
-        self.get_logger().info(f'Navigation result: {result}')
+        status = future.result().status
+        
+        # Broadcast result to WebSocket clients
+        if status == 4:  # SUCCEEDED
+            self.get_logger().info('Navigation succeeded!')
+            asyncio.run(self.send_data_to_clients(json.dumps({
+                "type": "nav_result",
+                "success": True
+            })))
+        else:
+            self.get_logger().info(f'Navigation failed with status: {status}')
+            asyncio.run(self.send_data_to_clients(json.dumps({
+                "type": "nav_result",
+                "success": False,
+                "error": f"Navigation failed (status: {status})"
+            })))
         
 
     def map_callback(self, msg):
