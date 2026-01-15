@@ -4,28 +4,48 @@ This project provides a web-based interface for monitoring and controlling a ROS
 
 ## Features
 
-- **Real-time Map Visualization**: Displays the global map (OccupancyGrid) from ROS2.
+### Visualization
+- **Real-time Map Visualization**: Displays the global map (OccupancyGrid) from ROS2 with proper rendering of free space (white), occupied space (black), and unknown areas (gray).
 - **Robot State Tracking**: Visualizes the robot's current pose and laser scan data (Point Cloud).
-- **Navigation Controls**:
-  - **Nav to Pose**: Send navigation goals by clicking and dragging on the map.
-  - **Path Drawing**: Interactively draw a path for the robot to follow.
-  - **Path Following**: Execute the drawn path using ROS2 navigation actions.
-- **Process Management**: capability to start/stop specific ROS2 launch files (currently configured for a specific `minimal.py` launch).
-- **Interactive UI**:
-  - Pan/Zoom map controls.
-  - Camera rotation.
-  - Materialize CSS styling.
+- **Navigation Status Display**: Real-time feedback showing distance to goal, current position, and navigation success/failure.
+
+### Navigation Controls
+- **Nav to Pose**: Send navigation goals by clicking and dragging on the map to set position and orientation.
+- **Set Pose**: Set the robot's initial pose estimate for localization (similar to RViz's "2D Pose Estimate").
+- **Path Drawing**: Interactively draw a path for the robot to follow.
+- **Path Following**: Execute the drawn path using ROS2 navigation actions.
+
+### Map Management
+- **Save Map**: Save the current SLAM-generated map to disk.
+- **Map List**: View all saved maps with clickable selection.
+- **Start/Stop Navigation**: Launch Nav2 stack with a selected map.
+- **Delete Map**: Remove unwanted maps from storage.
+- **Map Storage**: Maps are saved to `/home/pi/amr_configs/maps` (configurable).
+
+### Process Management
+- **Upstart/Stop**: Start and stop the minimal launch file.
+- **SLAM Nav**: Start and stop SLAM with async navigation.
+- **Nav Stack**: Start and stop the Nav2 navigation stack with a selected map.
+- **Button Interlocks**: Smart button states prevent conflicting operations.
+
+### Interactive UI
+- **Pan/Zoom**: Intuitive map controls with mouse and keyboard.
+- **Camera Rotation**: Rotate the view with dedicated buttons (+90°, -90°, Reset).
+- **Materialize CSS**: Clean, modern styling.
+- **Status Indicators**: Color-coded buttons and real-time status updates.
 
 ## Architecture
 
-The project consists of two main Python scripts:
+The project consists of three main components:
 
 1.  **`ss.py` (ROS2 WebSocket Bridge)**:
-    -   Acting as a ROS2 Node (`websocket_ros2_bridge`).
+    -   Acts as a ROS2 Node (`websocket_ros2_bridge`).
     -   Subscribes to `/map`, `/scan` (converting to PointCloud2), and TF transforms.
     -   Hosts a WebSocket server on port `8888`.
-    -   Broadcasts map, pose, and sensor data to connected web clients.
-    -   Receives navigation commands from the frontend and sends them to ROS2 Action Servers (`/navigate_to_pose`, `/follow_path`, `navigate_through_poses`).
+    -   Broadcasts map, pose, sensor data, and navigation feedback to connected web clients.
+    -   Receives navigation commands and process control from the frontend.
+    -   Manages ROS2 launch files via subprocess.
+    -   Publishes initial pose estimates to `/initialpose`.
 
 2.  **`web.py` (Web Server)**:
     -   A simple Flask application.
@@ -35,10 +55,13 @@ The project consists of two main Python scripts:
 3.  **Frontend (`templates/index.html`)**:
     -   Uses Three.js for 2D/3D visualization.
     -   Connects to the WebSocket bridge to push/pull data.
+    -   Provides interactive controls for navigation and map management.
 
 ## Prerequisites
 
--   **ROS2** (e.g., Humble, Foxy, Iron)
+-   **ROS2** (e.g., Humble, Iron, Jazzy)
+-   **Nav2** (Navigation2 stack)
+-   **SLAM Toolbox** (for mapping)
 -   **Python 3.8+**
 -   **Python Packages**:
     -   `rclpy` (ROS2 Python client library)
@@ -58,97 +81,189 @@ The project consists of two main Python scripts:
 
 2.  **Install Python dependencies:**
     ```bash
-    pip install -r requirements.txt
+    pip install flask websockets numpy scipy
     ```
-    *Note: You also need the ROS2 python dependencies installed via your ROS2 installation.*
+    *Note: ROS2 dependencies (`rclpy`, `nav2_msgs`, etc.) should be installed via your ROS2 installation.*
+
+3.  **Create required directories on your robot:**
+    ```bash
+    mkdir -p /home/pi/amr_configs/maps
+    ```
+
+4.  **Copy launch files to your robot:**
+    - `minimal.py` → `/home/pi/minimal.py`
+    - `slam_async_nav.py` → `/home/pi/slam_async_nav.py`
+    - `start_nav.py` → Current working directory where `ss.py` runs
+    - `nav2_parameter.yaml` → `/home/pi/amr_configs/nav2_parameter.yaml`
 
 ## Configuration
 
-Before running, you may need to adjust the following settings:
+Before running, adjust the following settings:
 
-1.  **WebSocket Connection IP**:
-    -   Open `templates/index.html`.
-    -   Locate line 205: `const ws = new WebSocket("ws://192.168.68.36:8888");`.
-    -   Change `192.168.68.36` to the IP address of the machine running `ss.py` (or `localhost` if running locally).
+1.  **WebSocket Connection**:
+    -   The frontend automatically uses `window.location.hostname` to connect to the WebSocket server.
+    -   Ensure `ss.py` is running on the same machine or update the connection logic in `index.html` if needed.
 
-2.  **Launch Scripts**:
-    -   The script `ss.py` currently has a hardcoded path for a launch file: `/home/pi/minimal.py`.
-    -   If you intend to use the "Upstart" feature, modify `ss.py` (line 469) to point to your desired launch file.
+2.  **Map Save Path** (in `ss.py`):
+    -   Default: `/home/pi/amr_configs/maps`
+    -   Modify `self.map_save_path` in `ss.py` line ~119 if needed.
+
+3.  **Launch File Paths** (in `ss.py`):
+    -   `minimal.py`: Line ~505
+    -   `slam_async_nav.py`: Line ~510
+    -   `start_nav.py`: Line ~543
 
 ## Usage
 
+### Starting the System
+
 1.  **Start the WebSocket Bridge:**
-    Make sure your ROS2 environment is sourced.
     ```bash
     source /opt/ros/<distro>/setup.bash
+    cd /path/to/ros2webinf
     python3 ss.py
     ```
 
 2.  **Start the Web Server:**
-    Open a new terminal.
     ```bash
     python3 web.py
     ```
 
 3.  **Access the Interface:**
-    -   Open a web browser and navigate to `http://localhost:8000` (or the IP of the machine running `web.py`).
+    -   Open a web browser and navigate to `http://<robot-ip>:8000`
+
+### Workflow Example
+
+#### Mapping (SLAM)
+1. Click **"SLAM Nav"** to start SLAM and navigation.
+2. Drive the robot around (use teleop or send navigation goals).
+3. Click **"Save Map"** and enter a name (e.g., "office_map").
+4. Click **"Stop SLAM"** when mapping is complete.
+
+#### Navigation with Saved Map
+1. Select a map from the **"Saved Maps"** list.
+2. Click **"Start Nav"** to launch Nav2 with the selected map.
+3. Click **"Set Pose"** and draw an arrow on the map to set the robot's initial position.
+4. Click **"Nav to Pose"** and draw an arrow to send a navigation goal.
+5. Monitor progress in the **"Navigation Status"** field.
+6. Click **"Stop Nav"** when done.
 
 ## Controls
 
--   **Pan**: `Ctrl` + `Left Click & Drag` (or just drag if supported).
--   **Zoom**: `Mouse Wheel` scroll.
--   **Menu**: Right-click to access context options (End, Enable Zoom, Pan, Disable).
--   **Left Sidebar**:
-    -   `Nav to pose`: Click to enable. On the map, click and drag to set position and orientation.
-    -   `Draw Path`: Click to enable. Click points on the map to draw a path.
-    -   `Path follower`: Sends the drawn path to the robot.
-    -   `Disable All`: Cancel current tool.
+### Mouse Controls
+-   **Pan**: `Ctrl` + `Left Click & Drag`
+-   **Zoom**: `Mouse Wheel` scroll
+-   **Nav to Pose**: Click and drag to set goal position and orientation
+-   **Set Pose**: Click and drag to set initial pose estimate
+-   **Draw Path**: Click points on the map to create a path
+
+### Right Panel Buttons
+-   **Upstart / Stop**: Start/stop minimal launch file
+-   **SLAM Nav / Stop SLAM**: Start/stop SLAM with navigation
+-   **Save Map**: Save current map to disk
+-   **Delete Map**: Delete selected map (requires selection)
+-   **Start Nav / Stop Nav**: Start/stop Nav2 with selected map
+
+### Left Panel Menu
+-   **Nav to pose**: Enable navigation goal mode
+-   **Set Pose**: Enable initial pose estimation mode
+-   **Draw Path**: Enable path drawing mode
+-   **Path follower**: Execute drawn path
+-   **Disable All**: Cancel current mode
+
+### Camera Controls
+-   **↺ +90°**: Rotate view counterclockwise
+-   **Reset**: Reset camera rotation
+-   **↻ -90°**: Rotate view clockwise
 
 ## API Documentation
 
-### 1. WebSocket API (Client <--> Server)
+### WebSocket API (Client <--> Server)
 
 The server listens on **`ws://0.0.0.0:8888`**.
 
-#### Incoming Messages (Client sends to Server)
-The server expects a JSON object with a `type` field.
+#### Incoming Messages (Client → Server)
 
-| Type | Name | Data / Description | Action Taken |
-| :--- | :--- | :--- | :--- |
-| **`action`** | `navtopose` | `{ data: { position: {...}, orientation: {...} } }` | Sends a `NavigateToPose` action goal to move the robot. |
-| **`action`** | `pathfollow` | `{ data: [ { position, orientation }, ... ] }` | Converts points to a global path, publishes it, and sends a `NavigateThroughPoses` action goal. |
-| **`process`** | `upstart` | `null` | Starts the `minimal.py` launch file (ROS 2 talker). |
-| **`process`** | `stop_upstart` | `null` | Stops the `minimal.py` process (sends `SIGINT`). |
-| **`process`** | `start_slam` | `null` | Starts the `slam_async_nav.py` launch file. |
-| **`process`** | `stop_slam` | `null` | Stops the `slam_async_nav.py` process (sends `SIGINT`). |
-| **`topic`** | `dummytopic` | `null` | *No operation (Placehoder)* |
-| **`service`** | `dummyservice`| `null` | *No operation (Placeholder)* |
+| Type | Name | Data | Action |
+|:-----|:-----|:-----|:-------|
+| **`action`** | `navtopose` | `{ position: {...}, orientation: {...} }` | Send NavigateToPose goal |
+| **`action`** | `set_pose` | `{ position: {...}, orientation: {...} }` | Publish initial pose estimate to `/initialpose` |
+| **`action`** | `pathfollow` | `[ { position, orientation }, ... ]` | Send NavigateThroughPoses goal |
+| **`process`** | `upstart` | - | Start minimal.py launch |
+| **`process`** | `stop_upstart` | - | Stop minimal.py process |
+| **`process`** | `start_slam` | - | Start slam_async_nav.py launch |
+| **`process`** | `stop_slam` | - | Stop SLAM process |
+| **`process`** | `save_map` | `"map_name"` | Save current map with given name |
+| **`process`** | `start_nav` | `"map_name"` | Start Nav2 with selected map |
+| **`process`** | `stop_nav` | - | Stop Nav2 stack |
+| **`process`** | `delete_map` | `"map_name"` | Delete map files (.yaml and .pgm) |
 
-#### Outgoing Messages (Server sends to Client)
-The server pushes updates to connected clients when ROS topics are received.
+#### Outgoing Messages (Server → Client)
 
-| Topic / Payload Key | Content | Description |
-| :--- | :--- | :--- |
-| **`map`** | ROS `OccupancyGrid` | The global map data (JSON serialized). |
-| **`robot_pose_in_map`** | ROS `PoseStamped` | The robot's current position and orientation in the map frame. |
-| **`scan_pointcloud`** | JSON with Base64 data | LaserScan converted to PointCloud2. The binary point data is Base64 encoded for transmission. |
+| Type | Content | Description |
+|:-----|:--------|:------------|
+| **`map`** | OccupancyGrid (JSON) | Global map data |
+| **`robot_pose_in_map`** | PoseStamped (JSON) | Robot's current pose |
+| **`scan_pointcloud`** | PointCloud2 (Base64) | Laser scan as point cloud |
+| **`map_list`** | `["map1", "map2", ...]` | List of saved map names |
+| **`process_status`** | `{ name: "minimal", status: "running" }` | Process state updates |
+| **`nav_feedback`** | `{ distance_remaining, current_pose, ... }` | Real-time navigation feedback |
+| **`nav_result`** | `{ success: true/false, error: "..." }` | Navigation completion status |
 
-### 2. ROS 2 Interface (Node: `websocket_ros2_bridge`)
+### ROS 2 Interface
 
-This node acts as the middleman between ROS 2 and the WebSocket.
+**Node Name:** `websocket_ros2_bridge`
 
-**Key Topics Subscribed:**
-*   `map` (`nav_msgs/OccupancyGrid`): For map visualization.
-*   `/scan` (`sensor_msgs/LaserScan`): Converted to PointCloud2 for visualization.
+**Subscribed Topics:**
+-   `/map` (`nav_msgs/OccupancyGrid`) - Global map
+-   `/scan` (`sensor_msgs/LaserScan`) - Laser scan data
+-   TF transforms (`map` → `base_link`)
 
-**Key Topics Published:**
-*   `pose_array` (`geometry_msgs/PoseArray`): visualizes the path sent by the user.
-*   `smoothed_path` (`nav_msgs/Path`): *Likely for debugging spline interpolation (commented out in some sections).*
+**Published Topics:**
+-   `/initialpose` (`geometry_msgs/PoseWithCovarianceStamped`) - Initial pose estimate
+-   `/pose_array` (`geometry_msgs/PoseArray`) - Path visualization
+-   `/scan_pointcloud` (`sensor_msgs/PointCloud2`) - Converted laser scan
 
-**Action Clients (Navigation):**
-*   `/navigate_to_pose` (`nav2_msgs/NavigateToPose`): Sends single goal commands.
-*   `navigate_through_poses` (`nav2_msgs/NavigateThroughPoses`): Sends path following commands.
-*   `/follow_path` (`nav2_msgs/FollowPath`): Initialized but typically used via `NavigateThroughPoses` in the current logic.
+**Action Clients:**
+-   `/navigate_to_pose` (`nav2_msgs/NavigateToPose`) - Single goal navigation
+-   `/navigate_through_poses` (`nav2_msgs/NavigateThroughPoses`) - Multi-waypoint navigation
+-   `/follow_path` (`nav2_msgs/FollowPath`) - Path following
 
 **Launch Management:**
-*   Uses `subprocess` to trigger `ros2 launch` commands directly, allowing the web interface to look like a remote control for bringing up/down robot sub-systems.
+-   Uses `subprocess` to manage ROS2 launch files
+-   Sends `SIGINT` for graceful shutdown
+
+## Map File Format
+
+Saved maps consist of two files:
+-   `<map_name>.yaml` - Metadata (resolution, origin, thresholds)
+-   `<map_name>.pgm` - Grayscale image (free=white, occupied=black, unknown=gray)
+
+**Map Threshold Configuration:**
+Maps are saved with `--free 0.15` to ensure unknown areas (gray, ~0.196) are correctly classified as unknown rather than free space.
+
+## Troubleshooting
+
+**Maps show only black and white (no gray):**
+-   Re-save the map using the updated "Save Map" button
+-   The new map will have correct thresholds (`free_thresh: 0.15`)
+
+**Buttons stuck in disabled state:**
+-   Refresh the web page
+-   The 5-second timer will update button states automatically
+
+**Navigation status not updating:**
+-   Ensure `ss.py` is restarted with the latest code
+-   Check WebSocket connection in browser console
+
+**Map list not updating after save:**
+-   Wait 2-3 seconds for the delayed update
+-   Refresh the page if needed
+
+## License
+
+[Specify your license here]
+
+## Contributing
+
+[Contribution guidelines]
