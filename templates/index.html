@@ -53,6 +53,12 @@
             <div style="margin-top: 10px;"></div>
             <a href="#!" class="btn menu-btn btn-small" data-action="savemap"
               style="background-color: #ff9800 !important;">Save Map</a>
+
+            <div id="map-list-container"
+              style="max-height: 200px; overflow-y: auto; margin-top: 15px; background: white; padding: 5px; border-radius: 4px;">
+              <h6 style="margin-top: 0; font-size: 12px; font-weight: bold; color: #333;">Saved Maps</h6>
+              <ul id="map-list" style="margin: 0; padding-left: 15px; font-size: 11px;"></ul>
+            </div>
           </div>
         </div>
       </div>
@@ -322,6 +328,17 @@
         scene.add(pointCloud);
       }
 
+      function updateMapList(maps) {
+        const list = document.getElementById("map-list");
+        list.innerHTML = "";
+        maps.forEach(mapName => {
+          const li = document.createElement("li");
+          li.textContent = mapName;
+          li.style.cursor = "default";
+          list.appendChild(li);
+        });
+      }
+
       function drawMap(message) {
         const width = message.info.width;
         const height = message.info.height;
@@ -392,6 +409,9 @@
 
       ws.onmessage = function (event) {
         const message = JSON.parse(event.data);
+        if (message.type === "map_list") {
+          updateMapList(message.data);
+        }
         if (message.topic === "map") {
           drawMap(message.data);
         }

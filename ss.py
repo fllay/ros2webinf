@@ -384,8 +384,11 @@ class WebSocketROS2Bridge(Node):
   
     async def websocket_handler(self, websocket, path):
         self.clients1.add(websocket)
-        #print("Websocket connected")
-        #print(websocket)
+        
+        # Send current map list to the new client
+        maps = self.get_saved_maps()
+        await websocket.send(json.dumps({"type": "map_list", "data": maps}))
+
         try:
             async for message in websocket:
                 # Process incoming messages here
@@ -485,6 +488,8 @@ class WebSocketROS2Bridge(Node):
                         try:
                             subprocess.Popen(cmd)
                             print(f"Saving map to {map_path}")
+                            # Give it a moment to save, then update clients
+                            asyncio.create_task(self.delayed_map_list_update())
                         except Exception as e:
                             print(f"Failed to save map: {e}")
 
@@ -493,6 +498,26 @@ class WebSocketROS2Bridge(Node):
             pass
         finally:
             self.clients1.remove(websocket)
+
+    async def delayed_map_list_update(self):
+        await asyncio.sleep(2)
+        await self.broadcast_map_list()
+
+    def get_saved_maps(self):
+        maps = []
+        try:
+            if os.path.exists(self.map_save_path):
+                for file in os.listdir(self.map_save_path):
+                    if file.endswith(".yaml"):
+                        maps.append(os.path.splitext(file)[0])
+        except Exception as e:
+            print(f"Error listing maps: {e}")
+        return sorted(maps)
+
+    async def broadcast_map_list(self):
+        maps = self.get_saved_maps()
+        payload = json.dumps({"type": "map_list", "data": maps})
+        await self.send_data_to_clients(payload)
 
     def start_websocket_server(self):
         print("Start loop")
