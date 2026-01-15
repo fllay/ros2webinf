@@ -598,6 +598,32 @@
         }
       }
 
+      function startNav() {
+        if (ws.readyState === WebSocket.OPEN) {
+          if (!selectedMap) {
+            alert("Please select a map from the list first!");
+            return;
+          }
+          const payload = { type: "process", name: "start_nav", data: selectedMap };
+          ws.send(JSON.stringify(payload));
+          M.toast({ html: `Starting navigation with map: ${selectedMap}`, classes: 'green' });
+        } else {
+          console.error("WebSocket is not connected. State:", ws.readyState);
+          alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
+        }
+      }
+
+      function stopNav() {
+        if (ws.readyState === WebSocket.OPEN) {
+          const payload = { type: "process", name: "stop_nav" };
+          ws.send(JSON.stringify(payload));
+          M.toast({ html: 'Stopping navigation...', classes: 'orange' });
+        } else {
+          console.error("WebSocket is not connected. State:", ws.readyState);
+          alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
+        }
+      }
+
       // Camera rotation functions
       function rotateCamera(degrees) {
         cameraRotationAngle += degrees;
