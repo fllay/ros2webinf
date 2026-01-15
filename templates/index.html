@@ -50,6 +50,9 @@
               style="background-color: #7e57c2 !important;">SLAM Nav</a>
             <a href="#!" class="btn menu-btn btn-small" data-action="stopslam"
               style="background-color: #ef5350 !important;">Stop SLAM</a>
+            <div style="margin-top: 10px;"></div>
+            <a href="#!" class="btn menu-btn btn-small" data-action="savemap"
+              style="background-color: #ff9800 !important;">Save Map</a>
           </div>
         </div>
       </div>
@@ -542,6 +545,20 @@
         }
       }
 
+      function saveMap() {
+        if (ws.readyState === WebSocket.OPEN) {
+          const mapName = prompt("Enter map name to save:", "my_new_map");
+          if (mapName) {
+            const payload = { type: "process", name: "save_map", data: mapName };
+            ws.send(JSON.stringify(payload));
+            M.toast({ html: `Saving map as ${mapName}...`, classes: 'blue' });
+          }
+        } else {
+          console.error("WebSocket is not connected. State:", ws.readyState);
+          alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
+        }
+      }
+
       // Camera rotation functions
       function rotateCamera(degrees) {
         cameraRotationAngle += degrees;
@@ -796,6 +813,9 @@
               break;
             case "stopslam":
               stopSlam();
+              break;
+            case "savemap":
+              saveMap();
               break;
             case "none":
               if (line_cursor) scene.remove(line_cursor);

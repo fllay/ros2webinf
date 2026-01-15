@@ -116,6 +116,7 @@ class WebSocketROS2Bridge(Node):
         super().__init__('websocket_ros2_bridge')
         self.clients1 = clients
         self.websocket_uri = "ws://0.0.0.0:8888"
+        self.map_save_path = "/home/pi/amr_configs/maps"
         #self.websocket_server = None
         # Start the WebSocket server in a separate thread
         self.websocket_thread = threading.Thread(target=self.start_websocket_server)
@@ -477,6 +478,15 @@ class WebSocketROS2Bridge(Node):
                         self.start_launch("slam_nav", launch_file_2)
                     if(json_dada['name'] == "stop_slam"):
                         self.stop_launch('slam_nav')
+                    if(json_dada['name'] == "save_map"):
+                        map_name = json_dada.get('data', 'my_map')
+                        map_path = os.path.join(self.map_save_path, map_name)
+                        cmd = ['ros2', 'run', 'nav2_map_server', 'map_saver_cli', '-f', map_path]
+                        try:
+                            subprocess.Popen(cmd)
+                            print(f"Saving map to {map_path}")
+                        except Exception as e:
+                            print(f"Failed to save map: {e}")
 
                 
         except websockets.ConnectionClosed:
