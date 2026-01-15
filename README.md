@@ -103,3 +103,52 @@ Before running, you may need to adjust the following settings:
     -   `Draw Path`: Click to enable. Click points on the map to draw a path.
     -   `Path follower`: Sends the drawn path to the robot.
     -   `Disable All`: Cancel current tool.
+
+## API Documentation
+
+### 1. WebSocket API (Client <--> Server)
+
+The server listens on **`ws://0.0.0.0:8888`**.
+
+#### Incoming Messages (Client sends to Server)
+The server expects a JSON object with a `type` field.
+
+| Type | Name | Data / Description | Action Taken |
+| :--- | :--- | :--- | :--- |
+| **`action`** | `navtopose` | `{ data: { position: {...}, orientation: {...} } }` | Sends a `NavigateToPose` action goal to move the robot. |
+| **`action`** | `pathfollow` | `{ data: [ { position, orientation }, ... ] }` | Converts points to a global path, publishes it, and sends a `NavigateThroughPoses` action goal. |
+| **`process`** | `upstart` | `null` | Starts the `minimal.py` launch file (ROS 2 talker). |
+| **`process`** | `stop_upstart` | `null` | Stops the `minimal.py` process (sends `SIGINT`). |
+| **`process`** | `start_slam` | `null` | Starts the `slam_async_nav.py` launch file. |
+| **`process`** | `stop_slam` | `null` | Stops the `slam_async_nav.py` process (sends `SIGINT`). |
+| **`topic`** | `dummytopic` | `null` | *No operation (Placehoder)* |
+| **`service`** | `dummyservice`| `null` | *No operation (Placeholder)* |
+
+#### Outgoing Messages (Server sends to Client)
+The server pushes updates to connected clients when ROS topics are received.
+
+| Topic / Payload Key | Content | Description |
+| :--- | :--- | :--- |
+| **`map`** | ROS `OccupancyGrid` | The global map data (JSON serialized). |
+| **`robot_pose_in_map`** | ROS `PoseStamped` | The robot's current position and orientation in the map frame. |
+| **`scan_pointcloud`** | JSON with Base64 data | LaserScan converted to PointCloud2. The binary point data is Base64 encoded for transmission. |
+
+### 2. ROS 2 Interface (Node: `websocket_ros2_bridge`)
+
+This node acts as the middleman between ROS 2 and the WebSocket.
+
+**Key Topics Subscribed:**
+*   `map` (`nav_msgs/OccupancyGrid`): For map visualization.
+*   `/scan` (`sensor_msgs/LaserScan`): Converted to PointCloud2 for visualization.
+
+**Key Topics Published:**
+*   `pose_array` (`geometry_msgs/PoseArray`): visualizes the path sent by the user.
+*   `smoothed_path` (`nav_msgs/Path`): *Likely for debugging spline interpolation (commented out in some sections).*
+
+**Action Clients (Navigation):**
+*   `/navigate_to_pose` (`nav2_msgs/NavigateToPose`): Sends single goal commands.
+*   `navigate_through_poses` (`nav2_msgs/NavigateThroughPoses`): Sends path following commands.
+*   `/follow_path` (`nav2_msgs/FollowPath`): Initialized but typically used via `NavigateThroughPoses` in the current logic.
+
+**Launch Management:**
+*   Uses `subprocess` to trigger `ros2 launch` commands directly, allowing the web interface to look like a remote control for bringing up/down robot sub-systems.
