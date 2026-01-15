@@ -8,6 +8,10 @@
 </head>
 
 <body>
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <h5 id="loading-text">Processing...</h5>
+  </div>
   <ul id="context-menu" class="custom-menu">
     <li id="end">End</li>
     <li id="zoom">Enable Zoom</li>
@@ -170,6 +174,55 @@
       background-color: #1565c0 !important;
     }
 
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #e0e0e0;
+    }
+
+    /* Disabled button style */
+    .btn.disabled {
+      pointer-events: none;
+      opacity: 0.5;
+      background-color: #9e9e9e !important;
+    }
+
+    /* Loading Overlay */
+    #loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      color: white;
+    }
+
+    .spinner {
+      border: 8px solid #f3f3f3;
+      border-top: 8px solid #3498db;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      animation: spin 2s linear infinite;
+      margin-bottom: 20px;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
     #3d-viewer {
       width: 100%;
       height: 100%;
@@ -272,7 +325,60 @@
       let points = [];
       let line, line_cursor;
       let selectedMap = null;
+
+      // Process states
+      let isMinimalRunning = false;
+      let isSlamRunning = false;
+      let isNavRunning = false;
+
       const mainCanvas = renderer.domElement;
+
+      function showLoading(text = "Processing...") {
+        document.getElementById('loading-text').innerText = text;
+        document.getElementById('loading-overlay').style.display = 'flex';
+      }
+
+      function hideLoading() {
+        document.getElementById('loading-overlay').style.display = 'none';
+      }
+
+      function updateButtonStates() {
+        const btnStartMinimal = document.querySelector('[data-action="startminimal"]');
+        const btnStopMinimal = document.querySelector('[data-action="stopminimal"]');
+
+        const btnStartSlam = document.querySelector('[data-action="startslam"]');
+        const btnStopSlam = document.querySelector('[data-action="stopslam"]');
+
+        const btnStartNav = document.querySelector('[data-action="startnav"]');
+        const btnStopNav = document.querySelector('[data-action="stopnav"]');
+
+        // Minimal
+        if (isMinimalRunning) {
+          btnStartMinimal.classList.add('disabled');
+          btnStopMinimal.classList.remove('disabled');
+        } else {
+          btnStartMinimal.classList.remove('disabled');
+          btnStopMinimal.classList.add('disabled');
+        }
+
+        // SLAM
+        if (isSlamRunning) {
+          btnStartSlam.classList.add('disabled');
+          btnStopSlam.classList.remove('disabled');
+        } else {
+          btnStartSlam.classList.remove('disabled');
+          btnStopSlam.classList.add('disabled');
+        }
+
+        // Nav
+        if (isNavRunning) {
+          btnStartNav.classList.add('disabled');
+          btnStopNav.classList.remove('disabled');
+        } else {
+          btnStartNav.classList.remove('disabled');
+          btnStopNav.classList.add('disabled');
+        }
+      }
 
       // Pan control variables
       let isPanning = false;
@@ -432,6 +538,22 @@
         const message = JSON.parse(event.data);
         if (message.type === "map_list") {
           updateMapList(message.data);
+          hideLoading();
+        }
+        if (message.type === "process_status") {
+          // Update state
+          const status = message.status === "running";
+          if (message.name === "minimal") isMinimalRunning = status;
+          if (message.name === "slam_nav") isSlamRunning = status;
+          if (message.name === "nav_stack") isNavRunning = status;
+
+          hideLoading();
+          updateButtonStates();
+
+          // Optional: Clear selection if Nav stopped
+          if (message.name === "nav_stack" && !status) {
+            // Maybe keep selection? User choice.
+          }
         }
         if (message.topic === "map") {
           drawMap(message.data);
@@ -544,9 +666,10 @@
 
       function startMinimal() {
         if (ws.readyState === WebSocket.OPEN) {
+          showLoading("Starting Upstart...");
           const payload = { type: "process", name: "upstart" };
           ws.send(JSON.stringify(payload));
-          M.toast({ html: 'Start command sent!', classes: 'green' });
+          // M.toast({ html: 'Start command sent!', classes: 'green' });
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -555,9 +678,10 @@
 
       function stopMinimal() {
         if (ws.readyState === WebSocket.OPEN) {
+          showLoading("Stopping Upstart...");
           const payload = { type: "process", name: "stop_upstart" };
           ws.send(JSON.stringify(payload));
-          M.toast({ html: 'Stop command sent!', classes: 'orange' });
+          // M.toast({ html: 'Stop command sent!', classes: 'orange' });
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -566,9 +690,10 @@
 
       function startSlam() {
         if (ws.readyState === WebSocket.OPEN) {
+          showLoading("Starting SLAM...");
           const payload = { type: "process", name: "start_slam" };
           ws.send(JSON.stringify(payload));
-          M.toast({ html: 'SLAM Start command sent!', classes: 'green' });
+          // M.toast({ html: 'SLAM Start command sent!', classes: 'green' });
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -577,9 +702,10 @@
 
       function stopSlam() {
         if (ws.readyState === WebSocket.OPEN) {
+          showLoading("Stopping SLAM...");
           const payload = { type: "process", name: "stop_slam" };
           ws.send(JSON.stringify(payload));
-          M.toast({ html: 'SLAM Stop command sent!', classes: 'orange' });
+          // M.toast({ html: 'SLAM Stop command sent!', classes: 'orange' });
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -590,9 +716,10 @@
         if (ws.readyState === WebSocket.OPEN) {
           const mapName = prompt("Enter map name to save:", "my_new_map");
           if (mapName) {
+            showLoading(`Saving map ${mapName}...`);
             const payload = { type: "process", name: "save_map", data: mapName };
             ws.send(JSON.stringify(payload));
-            M.toast({ html: `Saving map as ${mapName}...`, classes: 'blue' });
+            // M.toast({ html: `Saving map as ${mapName}...`, classes: 'blue' });
           }
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
@@ -606,9 +733,10 @@
             alert("Please select a map from the list first!");
             return;
           }
+          showLoading(`Starting Nav with ${selectedMap}...`);
           const payload = { type: "process", name: "start_nav", data: selectedMap };
           ws.send(JSON.stringify(payload));
-          M.toast({ html: `Starting navigation with map: ${selectedMap}`, classes: 'green' });
+          // M.toast({ html: `Starting navigation with map: ${selectedMap}`, classes: 'green' });
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -617,9 +745,10 @@
 
       function stopNav() {
         if (ws.readyState === WebSocket.OPEN) {
+          showLoading("Stopping Nav...");
           const payload = { type: "process", name: "stop_nav" };
           ws.send(JSON.stringify(payload));
-          M.toast({ html: 'Stopping navigation...', classes: 'orange' });
+          // M.toast({ html: 'Stopping navigation...', classes: 'orange' });
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");

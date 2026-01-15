@@ -417,6 +417,14 @@ class WebSocketROS2Bridge(Node):
         maps = self.get_saved_maps()
         await websocket.send(json.dumps({"type": "map_list", "data": maps}))
 
+        # Send current process statuses
+        for launch_name in self.launch_services:
+            await websocket.send(json.dumps({
+                "type": "process_status",
+                "name": launch_name,
+                "status": "running"
+            }))
+
         try:
             async for message in websocket:
                 # Process incoming messages here
@@ -604,6 +612,14 @@ class WebSocketROS2Bridge(Node):
         # Convert the dictionary to a JSON string
         return json.dumps(msg_with_topic)
 
+    async def broadcast_process_status(self, name, status):
+        payload = json.dumps({
+            "type": "process_status",
+            "name": name,
+            "status": status
+        })
+        await self.send_data_to_clients(payload)
+
     def start_launch(self, launch_name, launch_file_path, args=None):
         """Start a launch file using subprocess."""
         if launch_name in self.launch_services:
@@ -626,6 +642,7 @@ class WebSocketROS2Bridge(Node):
             
             self.launch_services[launch_name] = process
             self.get_logger().info(f"Started launch file '{launch_name}': {launch_file_path}")
+            asyncio.run(self.broadcast_process_status(launch_name, "running"))
             
         except Exception as e:
             self.get_logger().error(f"Failed to start launch file '{launch_name}': {e}")
@@ -643,12 +660,15 @@ class WebSocketROS2Bridge(Node):
             
             # Optionally wait for it to cleanly exit, but don't block too long
             try:
-                process.wait(timeout=2)
+                # We can't block here for too long if we want to be responsive
+                # process.wait(timeout=2)
+                pass 
             except subprocess.TimeoutExpired:
                 os.killpg(os.getpgid(process.pid), signal.SIGKILL)
             
             del self.launch_services[launch_name]
             self.get_logger().info(f"Stopped launch file '{launch_name}'.")
+            asyncio.run(self.broadcast_process_status(launch_name, "stopped"))
         except Exception as e:
             self.get_logger().error(f"Failed to stop launch file '{launch_name}': {e}")
 
