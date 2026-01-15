@@ -59,6 +59,12 @@
               <h6 style="margin-top: 0; font-size: 12px; font-weight: bold; color: #333;">Saved Maps</h6>
               <ul id="map-list" style="margin: 0; padding-left: 15px; font-size: 11px;"></ul>
             </div>
+
+            <div style="margin-top: 10px;"></div>
+            <a href="#!" class="btn menu-btn btn-small" data-action="startnav"
+              style="background-color: #00897b !important;">Start Nav</a>
+            <a href="#!" class="btn menu-btn btn-small" data-action="stopnav"
+              style="background-color: #d81b60 !important;">Stop Nav</a>
           </div>
         </div>
       </div>
@@ -263,6 +269,7 @@
       let enablePathFollow = false;
       let points = [];
       let line, line_cursor;
+      let selectedMap = null;
       const mainCanvas = renderer.domElement;
 
       // Pan control variables
@@ -334,7 +341,19 @@
         maps.forEach(mapName => {
           const li = document.createElement("li");
           li.textContent = mapName;
-          li.style.cursor = "default";
+          li.style.cursor = "pointer";
+          li.style.padding = "2px 5px";
+          li.style.borderRadius = "2px";
+
+          li.onclick = function () {
+            // Remove highlight from all
+            Array.from(list.children).forEach(child => child.style.backgroundColor = "transparent");
+            // Highlight current
+            li.style.backgroundColor = "#e0e0e0";
+            selectedMap = mapName;
+            M.toast({ html: `Selected map: ${mapName}`, classes: 'rounded' });
+          };
+
           list.appendChild(li);
         });
       }
@@ -836,6 +855,12 @@
               break;
             case "savemap":
               saveMap();
+              break;
+            case "startnav":
+              startNav();
+              break;
+            case "stopnav":
+              stopNav();
               break;
             case "none":
               if (line_cursor) scene.remove(line_cursor);

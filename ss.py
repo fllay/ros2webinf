@@ -492,6 +492,21 @@ class WebSocketROS2Bridge(Node):
                             asyncio.create_task(self.delayed_map_list_update())
                         except Exception as e:
                             print(f"Failed to save map: {e}")
+                    if(json_dada['name'] == "start_nav"):
+                        map_name = json_dada.get('data')
+                        if map_name:
+                            # Construct full path. Assume map name might not have .yaml extension if passed from UI list
+                            if not map_name.endswith('.yaml'):
+                                map_name += '.yaml'
+                            
+                            map_path = os.path.join(self.map_save_path, map_name)
+                            launch_file_nav = os.path.join(os.getcwd(), 'start_nav.py')
+                            
+                            # key=value arguments for ros2 launch
+                            map_arg = f"map:={map_path}"
+                            self.start_launch("nav_stack", launch_file_nav, args=[map_arg])
+                    if(json_dada['name'] == "stop_nav"):
+                        self.stop_launch('nav_stack')
 
                 
         except websockets.ConnectionClosed:
@@ -558,7 +573,7 @@ class WebSocketROS2Bridge(Node):
         # Convert the dictionary to a JSON string
         return json.dumps(msg_with_topic)
 
-    def start_launch(self, launch_name, launch_file_path):
+    def start_launch(self, launch_name, launch_file_path, args=None):
         """Start a launch file using subprocess."""
         if launch_name in self.launch_services:
             self.get_logger().warn(f"Launch '{launch_name}' is already running.")
@@ -573,6 +588,9 @@ class WebSocketROS2Bridge(Node):
             # This avoids the 'main thread' requirement of LaunchService
             # start_new_session=True creates a new process group (Python 3.2+)
             cmd = ['ros2', 'launch', launch_file_path]
+            if args:
+                cmd.extend(args)
+                
             process = subprocess.Popen(cmd, preexec_fn=os.setsid)
             
             self.launch_services[launch_name] = process
