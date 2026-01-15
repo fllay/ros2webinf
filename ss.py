@@ -22,7 +22,7 @@ import base64
 from rclpy.action import ActionClient
 from nav2_msgs.action import NavigateToPose, FollowPath
 from nav2_msgs.action import NavigateThroughPoses
-from geometry_msgs.msg import PoseStamped, PoseArray, Pose
+from geometry_msgs.msg import PoseStamped, PoseArray, Pose, PoseWithCovarianceStamped
 from nav_msgs.msg import Path
 from rclpy.task import Future
 from scipy.interpolate import CubicSpline
@@ -150,6 +150,7 @@ class WebSocketROS2Bridge(Node):
 
         self.pose_array_publisher = self.create_publisher(PoseArray, 'pose_array', 10)
         self.smooth_path_publisher = self.create_publisher(Path, 'smoothed_path', 10)
+        self.initial_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
 
         self.launch_services = {}
         self.launch_threads = {}
@@ -299,6 +300,33 @@ class WebSocketROS2Bridge(Node):
         pose_s.pose.orientation.w = float(p['orientation']['w'])
         
         return pose_s
+
+    def publish_initial_pose(self, p_data):
+        msg = PoseWithCovarianceStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'map'
+        
+        msg.pose.pose.position.x = float(p_data['position']['x'])
+        msg.pose.pose.position.y = float(p_data['position']['y'])
+        msg.pose.pose.position.z = float(p_data['position']['z'])
+        
+        msg.pose.pose.orientation.x = float(p_data['orientation']['x'])
+        msg.pose.pose.orientation.y = float(p_data['orientation']['y'])
+        msg.pose.pose.orientation.z = float(p_data['orientation']['z'])
+        msg.pose.pose.orientation.w = float(p_data['orientation']['w'])
+        
+        # Set covariance (copied from typical AMCL initial pose)
+        msg.pose.covariance = [
+            0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.25, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0685
+        ]
+                               
+        self.initial_pose_publisher.publish(msg)
+        # self.get_logger().info('Published initial pose')
     
     def create_path(self):
         path = Path()
@@ -400,6 +428,8 @@ class WebSocketROS2Bridge(Node):
                         pp = self.convert_json_pose_to_poasestamp(json_dada['data'])
                         print(pp)
                         self.send_goal_pose(pp)
+                    if(json_dada['name'] == "set_pose"):
+                        self.publish_initial_pose(json_dada['data'])
                     if(json_dada['name'] == "pathfollow"):
                         print("Get follow path")
 

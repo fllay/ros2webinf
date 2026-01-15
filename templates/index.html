@@ -19,6 +19,7 @@
       <div class="col s3 column-1 button-container">
         <h5>Menu Content</h5>
         <a href="#!" class="btn menu-btn" data-action="navtopose">Nav to pose</a>
+        <a href="#!" class="btn menu-btn" data-action="setpose">Set Pose</a>
         <a href="#!" class="btn menu-btn" data-action="drawpath">Draw Path</a>
         <a href="#!" class="btn menu-btn" data-action="pathfollow">Path follower</a>
         <a href="#!" class="btn menu-btn" data-action="none">Disable All</a>
@@ -265,6 +266,7 @@
 
       let mapTexture, mapMaterial, mapMesh, org_x, org_y, pointCloud, mheight, arrowPose, map_quatanion;
       let enableNavToPose = false;
+      let enableSetPose = false;
       let enableDrawLine = false;
       let enablePathFollow = false;
       let points = [];
@@ -672,7 +674,7 @@
         }
 
         // Existing functionality
-        if (enableNavToPose) {
+        if (enableNavToPose || enableSetPose) {
           startPoint = getMousePosition(event);
         }
         if (enableDrawLine) {
@@ -722,7 +724,7 @@
         }
 
         // Existing functionality
-        if (enableNavToPose) {
+        if (enableNavToPose || enableSetPose) {
           if (startPoint) {
             const endPoint = getMousePosition(event);
             if (endPoint) {
@@ -772,6 +774,13 @@
             const payload = { type: "action", name: "navtopose", data: arrowPose };
             ws.send(JSON.stringify(payload));
             enableNavToPose = false;
+          }
+        }
+        if (enableSetPose) {
+          if (arrowGroup) {
+            const payload = { type: "action", name: "set_pose", data: arrowPose };
+            ws.send(JSON.stringify(payload));
+            enableSetPose = false;
           }
         }
         if (enableDrawLine) {
@@ -846,6 +855,14 @@
             case "navtopose":
               if (line_cursor) scene.remove(line_cursor);
               enableNavToPose = true;
+              enableSetPose = false;
+              enableDrawLine = false;
+              enablePathFollow = false;
+              break;
+            case "setpose":
+              if (line_cursor) scene.remove(line_cursor);
+              enableNavToPose = false;
+              enableSetPose = true;
               enableDrawLine = false;
               enablePathFollow = false;
               break;
@@ -856,12 +873,14 @@
                 points.length = 0;
               }
               enableNavToPose = false;
+              enableSetPose = false;
               enableDrawLine = true;
               enablePathFollow = false;
               break;
             case "pathfollow":
               if (line_cursor) scene.remove(line_cursor);
               enableNavToPose = false;
+              enableSetPose = false;
               enableDrawLine = false;
               enablePathFollow = true;
               const poses = createPoseArrayFromPoints(points);
@@ -891,6 +910,7 @@
             case "none":
               if (line_cursor) scene.remove(line_cursor);
               enableNavToPose = false;
+              enableSetPose = false;
               enableDrawLine = false;
               enablePathFollow = false;
               break;
