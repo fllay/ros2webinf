@@ -363,7 +363,11 @@
       arrowHelper.renderOrder = 9;
       scene.add(arrowHelper);
 
+      const waypointMarkers = new THREE.Group();
+      scene.add(waypointMarkers);
+
       let mapTexture, mapMaterial, mapMesh, org_x, org_y, pointCloud, mheight, arrowPose, map_quatanion;
+      let mapres = 0.05; // Default map resolution
       let enableNavToPose = false;
       let enableSetPose = false;
       let enableAddWaypoint = false;
@@ -552,6 +556,7 @@
           li.textContent = "No waypoints";
           li.style.color = "#999";
           list.appendChild(li);
+          updateWaypointMarkers([]); // Clear markers
           return;
         }
 
@@ -593,6 +598,69 @@
           };
           list.appendChild(li);
         });
+
+        // Update markers on map
+        updateWaypointMarkers(wpList);
+      }
+
+      function updateWaypointMarkers(wpList) {
+        // Clear existing markers
+        while (waypointMarkers.children.length > 0) {
+          waypointMarkers.remove(waypointMarkers.children[0]);
+        }
+
+        wpList.forEach(wp => {
+          const pos = wp.position;
+          const ori = wp.orientation;
+
+          // Create Arrow
+          const dir = new THREE.Vector3(1, 0, 0);
+          dir.applyQuaternion(new THREE.Quaternion(ori.x, ori.y, ori.z, ori.w));
+          const origin = new THREE.Vector3(pos.x / mapres, pos.y / mapres, pos.z / mapres);
+          const length = 5;
+          const hex = 0x006400; // Dark Green
+          const arrow = new THREE.ArrowHelper(dir, origin, length, hex);
+          arrow.renderOrder = 10;
+          waypointMarkers.add(arrow);
+
+          // Create Label
+          const label = createLabelText(wp.name);
+          label.position.set(origin.x, origin.y, origin.z + 5);
+          label.renderOrder = 12;
+          waypointMarkers.add(label);
+        });
+      }
+
+      function createLabelText(text) {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        const fontSize = 24;
+        context.font = fontSize + 'px Arial';
+        const textWidth = context.measureText(text).width;
+
+        canvas.width = textWidth + 10;
+        canvas.height = fontSize + 10;
+
+        // Background
+        context.fillStyle = 'rgba(0, 100, 0, 0.7)'; // Dark green background
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Text
+        context.fillStyle = 'white';
+        context.font = fontSize + 'px Arial';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillText(text, canvas.width / 2, canvas.height / 2);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+        const sprite = new THREE.Sprite(material);
+
+        // Scale sprite based on text width
+        const aspect = canvas.width / canvas.height;
+        sprite.scale.set(aspect * 2, 2, 1);
+
+        return sprite;
       }
 
       function drawMap(message) {
