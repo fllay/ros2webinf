@@ -557,10 +557,33 @@
 
         wpList.forEach(wp => {
           const li = document.createElement("li");
-          li.textContent = wp.name;
           li.style.cursor = "pointer";
           li.style.padding = "2px 5px";
           li.style.borderRadius = "2px";
+          li.style.display = "flex";
+          li.style.justifyContent = "space-between";
+          li.style.alignItems = "center";
+
+          const nameSpan = document.createElement("span");
+          nameSpan.textContent = wp.name;
+          nameSpan.style.flex = "1";
+          li.appendChild(nameSpan);
+
+          const delBtn = document.createElement("span");
+          delBtn.innerHTML = "&times;";
+          delBtn.style.color = "red";
+          delBtn.style.padding = "0 5px";
+          delBtn.style.fontWeight = "bold";
+          delBtn.style.fontSize = "16px";
+          delBtn.title = "Delete Waypoint";
+
+          delBtn.onclick = function (e) {
+            e.stopPropagation(); // Prevent li.onclick
+            if (confirm(`Delete waypoint "${wp.name}"?`)) {
+              deleteWaypoint(wp.name);
+            }
+          };
+          li.appendChild(delBtn);
 
           li.onclick = function () {
             Array.from(list.children).forEach(child => child.style.backgroundColor = "transparent");
@@ -920,6 +943,22 @@
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
+        }
+      }
+
+      function deleteWaypoint(wpName) {
+        if (ws.readyState === WebSocket.OPEN) {
+          if (!selectedMap) return;
+          const payload = {
+            type: "process",
+            name: "delete_waypoint",
+            data: {
+              map_name: selectedMap,
+              waypoint_name: wpName
+            }
+          };
+          ws.send(JSON.stringify(payload));
+          M.toast({ html: `Deleting waypoint: ${wpName}`, classes: 'red' });
         }
       }
 

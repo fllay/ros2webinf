@@ -659,6 +659,27 @@ class WebSocketROS2Bridge(Node):
                             
                             asyncio.create_task(self.broadcast_waypoint_list(websocket, wps))
 
+                    if(json_dada['name'] == "delete_waypoint"):
+                        data = json_dada.get('data')
+                        if data:
+                            map_name = data.get('map_name')
+                            wp_name = data.get('waypoint_name')
+                            if map_name and wp_name:
+                                map_base = os.path.splitext(map_name)[0]
+                                json_path = os.path.join(self.map_save_path, f"{map_base}.json")
+                                if os.path.exists(json_path):
+                                    try:
+                                        with open(json_path, 'r') as f:
+                                            wps = json.load(f)
+                                        # Filter out the waypoint
+                                        new_wps = [wp for wp in wps if wp.get('name') != wp_name]
+                                        with open(json_path, 'w') as f:
+                                            json.dump(new_wps, f, indent=4)
+                                        print(f"Deleted waypoint {wp_name} from {json_path}")
+                                        asyncio.create_task(self.broadcast_waypoint_list(websocket, new_wps))
+                                    except Exception as e:
+                                        print(f"Error deleting waypoint: {e}")
+
                 
         except websockets.ConnectionClosed:
             pass
