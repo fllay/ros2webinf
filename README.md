@@ -22,6 +22,15 @@ This project provides a web-based interface for monitoring and controlling a ROS
 - **Delete Map**: Remove unwanted maps from storage.
 - **Map Storage**: Maps are saved to `/home/pi/amr_configs/maps` (configurable).
 
+### Waypoint System
+- **Add Waypoints**: Click and drag on the map to define waypoint position and heading.
+- **Named Waypoints**: Prompt to name each waypoint upon creation.
+- **Visual Markers**: Waypoints are displayed as short dark-green arrows with labels directly on the 3D map.
+- **Waypoint Storage**: Saved as JSON arrays in `<map_name>.json` within the map directory.
+- **Map Association**: Waypoints are automatically filtered and loaded based on the currently selected map.
+- **Navigate to Waypoint**: High-precision navigation to any saved waypoint with one click.
+- **Deletion**: Easily remove specific waypoints with a confirmation prompt.
+
 ### Process Management
 - **Upstart/Stop**: Start and stop the minimal launch file.
 - **SLAM Nav**: Start and stop SLAM with async navigation.
@@ -161,15 +170,17 @@ Before running, adjust the following settings:
 -   **Upstart / Stop**: Start/stop minimal launch file
 -   **SLAM Nav / Stop SLAM**: Start/stop SLAM with navigation
 -   **Save Map**: Save current map to disk
--   **Delete Map**: Delete selected map (requires selection)
+-   **Delete Map**: Delete selected map and its waypoints
 -   **Start Nav / Stop Nav**: Start/stop Nav2 with selected map
+-   **Go To WP**: Navigate to the selected waypoint
 
 ### Left Panel Menu
 -   **Nav to pose**: Enable navigation goal mode
 -   **Set Pose**: Enable initial pose estimation mode
+-   **Add Waypoint**: Enable waypoint creation mode (click and drag on map)
 -   **Draw Path**: Enable path drawing mode
 -   **Path follower**: Execute drawn path
--   **Disable All**: Cancel current mode
+-   **Disable All**: Cancel current interaction mode
 
 ### Camera Controls
 -   **↺ +90°**: Rotate view counterclockwise
@@ -196,7 +207,10 @@ The server listens on **`ws://0.0.0.0:8888`**.
 | **`process`** | `save_map` | `"map_name"` | Save current map with given name |
 | **`process`** | `start_nav` | `"map_name"` | Start Nav2 with selected map |
 | **`process`** | `stop_nav` | - | Stop Nav2 stack |
-| **`process`** | `delete_map` | `"map_name"` | Delete map files (.yaml and .pgm) |
+| **`process`** | `delete_map` | `"map_name"` | Delete map files (.yaml, .pgm, and .json) |
+| **`process`** | `save_waypoint` | `{ map_name, waypoint }` | Save a new waypoint to map's JSON array |
+| **`process`** | `load_waypoints` | `"map_name"` | Request waypoint list for a map |
+| **`process`** | `delete_waypoint` | `{ map_name, waypoint_name }` | Remove a specific waypoint from map's JSON |
 
 #### Outgoing Messages (Server → Client)
 
@@ -206,6 +220,7 @@ The server listens on **`ws://0.0.0.0:8888`**.
 | **`robot_pose_in_map`** | PoseStamped (JSON) | Robot's current pose |
 | **`scan_pointcloud`** | PointCloud2 (Base64) | Laser scan as point cloud |
 | **`map_list`** | `["map1", "map2", ...]` | List of saved map names |
+| **`waypoint_list`** | `[ { name, position, orientation }, ... ]` | List of waypoints for the map |
 | **`process_status`** | `{ name: "minimal", status: "running" }` | Process state updates |
 | **`nav_feedback`** | `{ distance_remaining, current_pose, ... }` | Real-time navigation feedback |
 | **`nav_result`** | `{ success: true/false, error: "..." }` | Navigation completion status |

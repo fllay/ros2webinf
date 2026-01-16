@@ -610,44 +610,71 @@
         }
 
         wpList.forEach(wp => {
-          const pos = wp.position;
-          const ori = wp.orientation;
-
-          // Create Arrow
-          const dir = new THREE.Vector3(1, 0, 0);
-          dir.applyQuaternion(new THREE.Quaternion(ori.x, ori.y, ori.z, ori.w));
-          const origin = new THREE.Vector3(pos.x / mapres, pos.y / mapres, pos.z / mapres);
-          const length = 5;
-          const hex = 0x006400; // Dark Green
-          const arrow = new THREE.ArrowHelper(dir, origin, length, hex);
-          arrow.renderOrder = 10;
-          waypointMarkers.add(arrow);
-
-          // Create Label
-          const label = createLabelText(wp.name);
-          label.position.set(origin.x, origin.y, origin.z + 5);
-          label.renderOrder = 12;
-          waypointMarkers.add(label);
+          const marker = createWaypointMarker(wp.name, wp.position, wp.orientation);
+          waypointMarkers.add(marker);
         });
+      }
+
+      function createWaypointMarker(name, pos, ori) {
+        const group = new THREE.Group();
+        const quat = new THREE.Quaternion(ori.x, ori.y, ori.z, ori.w);
+        const origin = new THREE.Vector3(pos.x / mapres, pos.y / mapres, pos.z / mapres);
+
+        const color = 0x006400; // Dark Green
+        const mat = new THREE.MeshBasicMaterial({ color: color });
+
+        // Short substantial arrow
+        const shaftLength = 6;
+        const shaftGeom = new THREE.CylinderGeometry(0.4, 0.4, shaftLength, 12);
+        shaftGeom.rotateZ(-Math.PI / 2); // Point along +X
+        shaftGeom.translate(shaftLength / 2, 0, 0);
+        const shaft = new THREE.Mesh(shaftGeom, mat);
+
+        const headLength = 3;
+        const headGeom = new THREE.ConeGeometry(1.2, headLength, 12);
+        headGeom.rotateZ(-Math.PI / 2); // Point along +X
+        headGeom.translate(shaftLength + headLength / 2, 0, 0);
+        const head = new THREE.Mesh(headGeom, mat);
+
+        const arrowGroup = new THREE.Group();
+        arrowGroup.add(shaft);
+        arrowGroup.add(head);
+        arrowGroup.quaternion.copy(quat);
+
+        group.add(arrowGroup);
+        group.position.copy(origin);
+
+        // Label
+        const label = createLabelText(name);
+        label.position.set(0, 0, 5); // Raised slightly
+        group.add(label);
+
+        return group;
       }
 
       function createLabelText(text) {
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
-        const fontSize = 24;
-        context.font = fontSize + 'px Arial';
+        const fontSize = 32;
+        context.font = 'bold ' + fontSize + 'px Arial';
         const textWidth = context.measureText(text).width;
 
-        canvas.width = textWidth + 10;
-        canvas.height = fontSize + 10;
+        const padding = 10;
+        canvas.width = textWidth + padding * 2;
+        canvas.height = fontSize + padding * 2;
 
         // Background
-        context.fillStyle = 'rgba(0, 100, 0, 0.7)'; // Dark green background
+        context.fillStyle = 'rgba(0, 100, 0, 0.85)'; // Dark green
         context.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Border
+        context.strokeStyle = 'white';
+        context.lineWidth = 2;
+        context.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
 
         // Text
         context.fillStyle = 'white';
-        context.font = fontSize + 'px Arial';
+        context.font = 'bold ' + fontSize + 'px Arial';
         context.textAlign = 'center';
         context.textBaseline = 'middle';
         context.fillText(text, canvas.width / 2, canvas.height / 2);
@@ -656,9 +683,9 @@
         const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
         const sprite = new THREE.Sprite(material);
 
-        // Scale sprite based on text width
         const aspect = canvas.width / canvas.height;
-        sprite.scale.set(aspect * 2, 2, 1);
+        const baseSize = 4;
+        sprite.scale.set(baseSize * aspect, baseSize, 1);
 
         return sprite;
       }
