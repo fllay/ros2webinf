@@ -24,6 +24,7 @@
         <h5>Menu Content</h5>
         <a href="#!" class="btn menu-btn" data-action="navtopose">Nav to pose</a>
         <a href="#!" class="btn menu-btn" data-action="setpose">Set Pose</a>
+        <a href="#!" class="btn menu-btn" data-action="addwaypoint">Add Waypoint</a>
         <a href="#!" class="btn menu-btn" data-action="drawpath">Draw Path</a>
         <a href="#!" class="btn menu-btn" data-action="pathfollow">Path follower</a>
         <a href="#!" class="btn menu-btn" data-action="none">Disable All</a>
@@ -56,14 +57,29 @@
             <div style="margin-top: 10px;"></div>
             <a href="#!" class="btn menu-btn btn-small btn-orange" data-action="savemap">Save Map</a>
 
-            <div id="map-list-container"
-              style="max-height: 200px; overflow-y: auto; margin-top: 15px; background: white; padding: 5px; border-radius: 4px;">
-              <h6 style="margin-top: 0; font-size: 12px; font-weight: bold; color: #333;">Saved Maps</h6>
-              <ul id="map-list" style="margin: 0; padding-left: 15px; font-size: 11px;"></ul>
+            <div class="row" style="margin-bottom: 0;">
+              <div class="col s6" style="padding: 2px;">
+                <div id="map-list-container"
+                  style="max-height: 200px; overflow-y: auto; margin-top: 15px; background: white; padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
+                  <h6 style="margin-top: 0; font-size: 11px; font-weight: bold; color: #333;">Maps</h6>
+                  <ul id="map-list" style="margin: 0; padding-left: 10px; font-size: 10px;"></ul>
+                </div>
+              </div>
+              <div class="col s6" style="padding: 2px;">
+                <div id="waypoint-list-container"
+                  style="max-height: 200px; overflow-y: auto; margin-top: 15px; background: white; padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
+                  <h6 style="margin-top: 0; font-size: 11px; font-weight: bold; color: #333;">Waypoints</h6>
+                  <ul id="waypoint-list" style="margin: 0; padding-left: 10px; font-size: 10px;"></ul>
+                </div>
+              </div>
             </div>
 
-            <div style="margin-top: 10px;"></div>
-            <a href="#!" class="btn menu-btn btn-small btn-red disabled" data-action="deletemap">Delete Map</a>
+            <div style="margin-top: 5px; display: flex; gap: 5px;">
+              <a href="#!" class="btn menu-btn btn-small btn-red disabled" data-action="deletemap"
+                style="flex: 1; font-size: 10px; padding: 0;">Delete Map</a>
+              <a href="#!" class="btn menu-btn btn-small btn-teal disabled" data-action="gotowaypoint"
+                style="flex: 1; font-size: 10px; padding: 0;">Go To WP</a>
+            </div>
 
             <div style="margin-top: 10px;"></div>
             <a href="#!" class="btn menu-btn btn-small btn-teal" data-action="startnav">Start Nav</a>
@@ -350,11 +366,13 @@
       let mapTexture, mapMaterial, mapMesh, org_x, org_y, pointCloud, mheight, arrowPose, map_quatanion;
       let enableNavToPose = false;
       let enableSetPose = false;
+      let enableAddWaypoint = false;
       let enableDrawLine = false;
       let enablePathFollow = false;
       let points = [];
       let line, line_cursor;
       let selectedMap = null;
+      let selectedWaypoint = null;
 
       // Process states
       let isMinimalRunning = false;
@@ -505,6 +523,11 @@
               deleteBtn.classList.remove('disabled');
             }
 
+            // Load waypoints for selected map
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "process", name: "load_waypoints", data: mapName }));
+            }
+
             M.toast({ html: `Selected map: ${mapName}`, classes: 'rounded' });
           };
 
@@ -515,6 +538,38 @@
         if (!selectedMap && deleteBtn) {
           deleteBtn.classList.add('disabled');
         }
+      }
+
+      function updateWaypointList(wpList) {
+        const list = document.getElementById("waypoint-list");
+        const goBtn = document.querySelector('[data-action="gotowaypoint"]');
+        list.innerHTML = "";
+        selectedWaypoint = null;
+        if (goBtn) goBtn.classList.add('disabled');
+
+        if (!wpList || wpList.length === 0) {
+          const li = document.createElement("li");
+          li.textContent = "No waypoints";
+          li.style.color = "#999";
+          list.appendChild(li);
+          return;
+        }
+
+        wpList.forEach(wp => {
+          const li = document.createElement("li");
+          li.textContent = wp.name;
+          li.style.cursor = "pointer";
+          li.style.padding = "2px 5px";
+          li.style.borderRadius = "2px";
+
+          li.onclick = function () {
+            Array.from(list.children).forEach(child => child.style.backgroundColor = "transparent");
+            li.style.backgroundColor = "#e0e0e0";
+            selectedWaypoint = wp;
+            if (goBtn) goBtn.classList.remove('disabled');
+          };
+          list.appendChild(li);
+        });
       }
 
       function drawMap(message) {
@@ -638,6 +693,9 @@
           } else {
             updateNavStatus(`Failed: ${message.error || "Unknown error"}`, "#ef5350");
           }
+        }
+        if (message.type === "waypoint_list") {
+          updateWaypointList(message.data);
         }
         if (message.topic === "map") {
           drawMap(message.data);
@@ -938,7 +996,7 @@
         }
 
         // Existing functionality
-        if (enableNavToPose || enableSetPose) {
+        if (enableNavToPose || enableSetPose || enableAddWaypoint) {
           startPoint = getMousePosition(event);
         }
         if (enableDrawLine) {
@@ -988,7 +1046,7 @@
         }
 
         // Existing functionality
-        if (enableNavToPose || enableSetPose) {
+        if (enableNavToPose || enableSetPose || enableAddWaypoint) {
           if (startPoint) {
             const endPoint = getMousePosition(event);
             if (endPoint) {
@@ -1045,6 +1103,28 @@
             const payload = { type: "action", name: "set_pose", data: arrowPose };
             ws.send(JSON.stringify(payload));
             enableSetPose = false;
+          }
+        }
+        if (enableAddWaypoint) {
+          if (arrowGroup) {
+            const wpName = prompt("Enter Waypoint Name:");
+            if (wpName) {
+              const payload = {
+                type: "process",
+                name: "save_waypoint",
+                data: {
+                  map_name: selectedMap,
+                  waypoint: {
+                    name: wpName,
+                    position: arrowPose.position,
+                    orientation: arrowPose.orientation
+                  }
+                }
+              };
+              ws.send(JSON.stringify(payload));
+              M.toast({ html: `Saving waypoint ${wpName}...`, classes: 'rounded' });
+              enableAddWaypoint = false;
+            }
           }
         }
         if (enableDrawLine) {
@@ -1173,6 +1253,26 @@
               break;
             case "deletemap":
               deleteMap();
+              break;
+            case "addwaypoint":
+              if (!selectedMap) {
+                alert("Please select a map first!");
+                return;
+              }
+              if (line_cursor) scene.remove(line_cursor);
+              enableNavToPose = false;
+              enableSetPose = false;
+              enableAddWaypoint = true;
+              enableDrawLine = false;
+              enablePathFollow = false;
+              M.toast({ html: 'Click and drag on map to set waypoint', classes: 'rounded' });
+              break;
+            case "gotowaypoint":
+              if (selectedWaypoint) {
+                const payload = { type: "action", name: "navtopose", data: selectedWaypoint };
+                ws.send(JSON.stringify(payload));
+                M.toast({ html: `Navigating to ${selectedWaypoint.name}...`, classes: 'blue' });
+              }
               break;
             case "none":
               if (line_cursor) scene.remove(line_cursor);
