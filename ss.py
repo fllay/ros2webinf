@@ -159,7 +159,8 @@ class WebSocketROS2Bridge(Node):
         # Global UI State
         self.current_ui_state = {
             "selected_map": None,
-            "selected_waypoint_name": None
+            "selected_waypoint_name": None,
+            "selected_path_name": None
         }
 
         # Message Caching for new clients
