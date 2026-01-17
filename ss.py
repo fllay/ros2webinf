@@ -209,7 +209,8 @@ class WebSocketROS2Bridge(Node):
         }
         
         # Broadcast to all WebSocket clients
-        asyncio.run(self.send_data_to_clients(json.dumps(feedback_data)))
+        # asyncio.run(self.send_data_to_clients(json.dumps(feedback_data)))
+        self.broadcast_message(json.dumps(feedback_data))
 
     def send_goal_path(self, goal_path: FollowPath):
 
@@ -231,11 +232,12 @@ class WebSocketROS2Bridge(Node):
         if not goal_handle.accepted:
             self.get_logger().info('Goal rejected.')
             # Broadcast rejection
-            asyncio.run(self.send_data_to_clients(json.dumps({
+            # Broadcast rejection
+            self.broadcast_message(json.dumps({
                 "type": "nav_result",
                 "success": False,
                 "error": "Goal rejected by navigation server"
-            })))
+            }))
             return
 
         self.get_logger().info('Goal accepted.')
@@ -247,26 +249,28 @@ class WebSocketROS2Bridge(Node):
         status = future.result().status
         
         # Broadcast result to WebSocket clients
+        # Broadcast result to WebSocket clients
         if status == 4:  # SUCCEEDED
             self.get_logger().info('Navigation succeeded!')
-            asyncio.run(self.send_data_to_clients(json.dumps({
+            self.broadcast_message(json.dumps({
                 "type": "nav_result",
                 "success": True
-            })))
+            }))
         else:
             self.get_logger().info(f'Navigation failed with status: {status}')
-            asyncio.run(self.send_data_to_clients(json.dumps({
+            self.broadcast_message(json.dumps({
                 "type": "nav_result",
                 "success": False,
                 "error": f"Navigation failed (status: {status})"
-            })))
+            }))
         
 
     def map_callback(self, msg):
         # Prepare map data to be sent through WebSocket
         map_data_json = self.ros2_msg_to_json('map',msg)
         self.last_map_json = map_data_json
-        asyncio.run(self.send_data_to_clients(map_data_json))
+        # asyncio.run(self.send_data_to_clients(map_data_json))
+        self.broadcast_message(map_data_json)
 
     def scan_callback(self, scan_msg):
         # Convert LaserScan to PointCloud2
@@ -789,6 +793,15 @@ class WebSocketROS2Bridge(Node):
                 #print(f"Data sent to client: {websocket}")
         except Exception as e:
             print(f"Error in send_data_to_clients: {e}")
+
+    def broadcast_message(self, data):
+        """Helper to schedule message broadcast on the WebSocket event loop from any thread."""
+        if hasattr(self, 'loop') and self.loop.is_running():
+            asyncio.run_coroutine_threadsafe(self.send_data_to_clients(data), self.loop)
+        else:
+            # Fallback if loop isn't ready or we are on the main thread (less likely here)
+            # print("Warning: WebSocket loop not ready for broadcast")
+            pass
 
 
     def ros2_msg_to_json(self, topic_name, msg):
