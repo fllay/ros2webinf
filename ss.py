@@ -654,7 +654,9 @@ class WebSocketROS2Bridge(Node):
 
                     if(json_dada['name'] == "save_waypoint"):
                         data = json_dada.get('data')
-                            
+                        if data:
+                            map_name = data.get('map_name')
+                            waypoint = data.get('waypoint')
                             if map_name and waypoint:
                                 map_base = os.path.splitext(map_name)[0]
                                 self.save_map_data(map_base, "waypoints", waypoint)
