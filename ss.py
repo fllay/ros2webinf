@@ -654,46 +654,31 @@ class WebSocketROS2Bridge(Node):
 
                     if(json_dada['name'] == "save_waypoint"):
                         data = json_dada.get('data')
+                            
+                            if map_name and waypoint:
+                                map_base = os.path.splitext(map_name)[0]
+                                self.save_map_data(map_base, "waypoints", waypoint)
+                                # Broadcast updated list
+                                asyncio.create_task(self.broadcast_waypoint_list(websocket, self.load_map_data(map_base).get("waypoints", [])))
+
+                    if(json_dada['name'] == "save_path"):
+                        data = json_dada.get('data')
                         if data:
                             map_name = data.get('map_name')
-                            waypoint = data.get('waypoint')
-                            if map_name and waypoint:
-                                # Standardize map_name (remove .yaml if present)
+                            path_data = data.get('path')
+                            if map_name and path_data:
                                 map_base = os.path.splitext(map_name)[0]
-                                json_path = os.path.join(self.map_save_path, f"{map_base}.json")
-                                
-                                wps = []
-                                if os.path.exists(json_path):
-                                    try:
-                                        with open(json_path, 'r') as f:
-                                            wps = json.load(f)
-                                    except:
-                                        wps = []
-                                
-                                wps.append(waypoint)
-                                try:
-                                    with open(json_path, 'w') as f:
-                                        json.dump(wps, f, indent=4)
-                                    print(f"Saved waypoint to {json_path}")
-                                    # Broadcast updated list back to client
-                                    asyncio.create_task(self.broadcast_waypoint_list(websocket, wps))
-                                except Exception as e:
-                                    print(f"Error saving waypoint: {e}")
+                                self.save_map_data(map_base, "paths", path_data)
+                                # Broadcast updated lists
+                                asyncio.create_task(self.broadcast_path_list(websocket, self.load_map_data(map_base).get("paths", [])))
 
                     if(json_dada['name'] == "load_waypoints"):
                         map_name = json_dada.get('data')
                         if map_name:
                             map_base = os.path.splitext(map_name)[0]
-                            json_path = os.path.join(self.map_save_path, f"{map_base}.json")
-                            wps = []
-                            if os.path.exists(json_path):
-                                try:
-                                    with open(json_path, 'r') as f:
-                                        wps = json.load(f)
-                                except Exception as e:
-                                    print(f"Error loading waypoints: {e}")
-                            
-                            asyncio.create_task(self.broadcast_waypoint_list(websocket, wps))
+                            data = self.load_map_data(map_base)
+                            asyncio.create_task(self.broadcast_waypoint_list(websocket, data.get("waypoints", [])))
+                            asyncio.create_task(self.broadcast_path_list(websocket, data.get("paths", [])))
 
                     if(json_dada['name'] == "delete_waypoint"):
                         data = json_dada.get('data')
@@ -702,19 +687,18 @@ class WebSocketROS2Bridge(Node):
                             wp_name = data.get('waypoint_name')
                             if map_name and wp_name:
                                 map_base = os.path.splitext(map_name)[0]
-                                json_path = os.path.join(self.map_save_path, f"{map_base}.json")
-                                if os.path.exists(json_path):
-                                    try:
-                                        with open(json_path, 'r') as f:
-                                            wps = json.load(f)
-                                        # Filter out the waypoint
-                                        new_wps = [wp for wp in wps if wp.get('name') != wp_name]
-                                        with open(json_path, 'w') as f:
-                                            json.dump(new_wps, f, indent=4)
-                                        print(f"Deleted waypoint {wp_name} from {json_path}")
-                                        asyncio.create_task(self.broadcast_waypoint_list(websocket, new_wps))
-                                    except Exception as e:
-                                        print(f"Error deleting waypoint: {e}")
+                                self.delete_map_item(map_base, "waypoints", wp_name)
+                                asyncio.create_task(self.broadcast_waypoint_list(websocket, self.load_map_data(map_base).get("waypoints", [])))
+
+                    if(json_dada['name'] == "delete_path"):
+                        data = json_dada.get('data')
+                        if data:
+                            map_name = data.get('map_name')
+                            path_name = data.get('path_name')
+                            if map_name and path_name:
+                                map_base = os.path.splitext(map_name)[0]
+                                self.delete_map_item(map_base, "paths", path_name)
+                                asyncio.create_task(self.broadcast_path_list(websocket, self.load_map_data(map_base).get("paths", [])))
 
                 
         except websockets.ConnectionClosed:
@@ -745,6 +729,60 @@ class WebSocketROS2Bridge(Node):
     async def broadcast_waypoint_list(self, websocket, wps):
         payload = json.dumps({"type": "waypoint_list", "data": wps})
         await websocket.send(payload)
+
+    async def broadcast_path_list(self, websocket, paths):
+        payload = json.dumps({"type": "path_list", "data": paths})
+        await websocket.send(payload)
+
+    # --- Map Data Helpers ---
+    def load_map_data(self, map_base):
+        json_path = os.path.join(self.map_save_path, f"{map_base}.json")
+        default_data = {"waypoints": [], "paths": []}
+        if not os.path.exists(json_path):
+            return default_data
+        
+        try:
+            with open(json_path, 'r') as f:
+                content = json.load(f)
+                # Migration: if list, assume it's waypoints
+                if isinstance(content, list):
+                    return {"waypoints": content, "paths": []}
+                # Else assume it's the new dict structure
+                return content
+        except Exception as e:
+            print(f"Error loading map data: {e}")
+            return default_data
+
+    def save_map_data(self, map_base, type_key, item):
+        json_path = os.path.join(self.map_save_path, f"{map_base}.json")
+        data = self.load_map_data(map_base)
+        
+        # Ensure key exists
+        if type_key not in data:
+            data[type_key] = []
+        
+        data[type_key].append(item)
+        
+        try:
+            with open(json_path, 'w') as f:
+                json.dump(data, f, indent=4)
+            print(f"Saved {type_key} to {json_path}")
+        except Exception as e:
+            print(f"Error saving map data: {e}")
+
+    def delete_map_item(self, map_base, type_key, item_name):
+        json_path = os.path.join(self.map_save_path, f"{map_base}.json")
+        data = self.load_map_data(map_base)
+        
+        if type_key in data:
+            data[type_key] = [i for i in data[type_key] if i.get('name') != item_name and i.get('path_name') != item_name]
+        
+        try:
+            with open(json_path, 'w') as f:
+                json.dump(data, f, indent=4)
+            print(f"Deleted {item_name} from {type_key} in {json_path}")
+        except Exception as e:
+            print(f"Error deleting map item: {e}")
 
     def start_websocket_server(self):
         print("Start loop")

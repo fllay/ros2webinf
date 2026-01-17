@@ -25,7 +25,10 @@
         <a href="#!" class="btn menu-btn" data-action="navtopose">Nav to pose</a>
         <a href="#!" class="btn menu-btn" data-action="setpose">Set Pose</a>
         <a href="#!" class="btn menu-btn" data-action="addwaypoint">Add Waypoint</a>
+        <a href="#!" class="btn menu-btn" data-action="addwaypoint">Add Waypoint</a>
         <a href="#!" class="btn menu-btn" data-action="drawpath">Draw Path</a>
+        <a href="#!" class="btn menu-btn disabled" data-action="savepath"
+          style="background-color: #7cb342 !important;">Save Path</a>
         <a href="#!" class="btn menu-btn" data-action="pathfollow">Path follower</a>
         <a href="#!" class="btn menu-btn" data-action="none">Disable All</a>
       </div>
@@ -58,18 +61,32 @@
             <a href="#!" class="btn menu-btn btn-small btn-orange" data-action="savemap">Save Map</a>
 
             <div class="row" style="margin-bottom: 0;">
-              <div class="col s6" style="padding: 2px;">
+              <!-- Map List (Full Width) -->
+              <div class="col s12" style="padding: 2px;">
                 <div id="map-list-container"
-                  style="max-height: 200px; overflow-y: auto; margin-top: 15px; background: white; padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
+                  style="max-height: 150px; overflow-y: auto; margin-top: 5px; background: white; padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
                   <h6 style="margin-top: 0; font-size: 11px; font-weight: bold; color: #333;">Maps</h6>
                   <ul id="map-list" style="margin: 0; padding-left: 10px; font-size: 10px;"></ul>
                 </div>
               </div>
+            </div>
+
+            <div class="row" style="margin-bottom: 0;">
+              <!-- Waypoints (Left Half) -->
               <div class="col s6" style="padding: 2px;">
                 <div id="waypoint-list-container"
-                  style="max-height: 200px; overflow-y: auto; margin-top: 15px; background: white; padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
+                  style="max-height: 150px; overflow-y: auto; margin-top: 5px; background: white; padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
                   <h6 style="margin-top: 0; font-size: 11px; font-weight: bold; color: #333;">Waypoints</h6>
                   <ul id="waypoint-list" style="margin: 0; padding-left: 10px; font-size: 10px;"></ul>
+                </div>
+              </div>
+
+              <!-- Paths (Right Half) -->
+              <div class="col s6" style="padding: 2px;">
+                <div id="path-list-container"
+                  style="max-height: 150px; overflow-y: auto; margin-top: 5px; background: white; padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
+                  <h6 style="margin-top: 0; font-size: 11px; font-weight: bold; color: #333;">Paths</h6>
+                  <ul id="path-list" style="margin: 0; padding-left: 10px; font-size: 10px;"></ul>
                 </div>
               </div>
             </div>
@@ -79,6 +96,13 @@
                 style="flex: 1; font-size: 10px; padding: 0;">Delete Map</a>
               <a href="#!" class="btn menu-btn btn-small btn-teal disabled" data-action="gotowaypoint"
                 style="flex: 1; font-size: 10px; padding: 0;">Go To WP</a>
+            </div>
+
+            <div style="margin-top: 5px; display: flex; gap: 5px;">
+              <a href="#!" class="btn menu-btn btn-small btn-purple disabled" data-action="runpath"
+                style="flex: 1; font-size: 10px; padding: 0;">Run Path</a>
+              <a href="#!" class="btn menu-btn btn-small btn-grey" data-action="clearpath"
+                style="flex: 1; font-size: 10px; padding: 0;">Clear Path</a>
             </div>
 
             <div style="margin-top: 10px;"></div>
@@ -385,11 +409,16 @@
       // Server-side UI State
       let currentServerState = {
         selected_map: null,
-        selected_waypoint_name: null
+        selected_waypoint_name: null,
+        selected_path_name: null
       };
 
       let lastMapListData = [];
       let lastWPListData = [];
+      let lastPathListData = [];
+
+      let selectedPath = null;
+      let pathVisualization = null;
 
       const mainCanvas = renderer.domElement;
 
@@ -555,17 +584,11 @@
             li.style.backgroundColor = "#e0e0e0";
             selectedMap = mapName;
 
-            // Enable delete button
-            if (deleteBtn) {
-              deleteBtn.classList.remove('disabled');
-            }
-
-            // Load waypoints for selected map
+            // Load waypoints and paths for selected map
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: "process", name: "load_waypoints", data: mapName }));
             }
 
-            M.toast({ html: `Selected map: ${mapName}`, classes: 'rounded' });
             saveUIState();
           };
 
@@ -575,12 +598,15 @@
             selectedMap = mapName;
             const deleteBtn = document.querySelector('[data-action="deletemap"]');
             if (deleteBtn) deleteBtn.classList.remove('disabled');
-            // Don't auto-request waypoints here to avoid loops, 
-            // the ui_state handler will handle the initial request.
+            // Don't auto-request here to avoid loops
           }
 
           list.appendChild(li);
         });
+
+        // Clear other lists if map list is updated (implying refetch/change)
+        // Actually keep them unless map changes
+
 
         // If no map selected, ensure delete button is disabled
         if (!selectedMap && deleteBtn) {
@@ -710,6 +736,117 @@
         return group;
       }
 
+      function updatePathList(pathList) {
+        lastPathListData = pathList;
+        const list = document.getElementById("path-list");
+        const runBtn = document.querySelector('[data-action="runpath"]');
+        list.innerHTML = "";
+        selectedPath = null;
+        if (runBtn) runBtn.classList.add('disabled');
+
+        if (!pathList || pathList.length === 0) {
+          const li = document.createElement("li");
+          li.textContent = "No paths";
+          li.style.color = "#999";
+          list.appendChild(li);
+          return;
+        }
+
+        pathList.forEach(p => {
+          const li = document.createElement("li");
+          li.style.cursor = "pointer";
+          li.style.padding = "2px 5px";
+          li.style.borderRadius = "2px";
+          li.style.display = "flex";
+          li.style.justifyContent = "space-between";
+          li.style.alignItems = "center";
+
+          const nameSpan = document.createElement("span");
+          nameSpan.textContent = p.name;
+          nameSpan.style.flex = "1";
+          li.appendChild(nameSpan);
+
+          const delBtn = document.createElement("span");
+          delBtn.innerHTML = "&times;";
+          delBtn.style.color = "red";
+          delBtn.style.padding = "0 5px";
+          delBtn.style.fontWeight = "bold";
+          delBtn.style.fontSize = "16px";
+          delBtn.title = "Delete Path";
+
+          delBtn.onclick = function (e) {
+            e.stopPropagation();
+            if (confirm(`Delete path "${p.name}"?`)) {
+              deletePath(p.name);
+            }
+          };
+          li.appendChild(delBtn);
+
+          li.onclick = function () {
+            Array.from(list.children).forEach(child => child.style.backgroundColor = "transparent");
+            li.style.backgroundColor = "#e0e0e0";
+            selectedPath = p;
+            if (runBtn) runBtn.classList.remove('disabled');
+            visualizePath(p);
+            saveUIState(); // We might need to update saveUIState to include path
+          };
+          list.appendChild(li);
+        });
+
+        // HIGHLIGHT if matches server state
+        if (currentServerState.selected_path_name) {
+          Array.from(list.children).forEach(li => {
+            const span = li.querySelector('span');
+            if (span && span.textContent === currentServerState.selected_path_name) {
+              li.style.backgroundColor = "#e0e0e0";
+              selectedPath = pathList.find(p => p.name === currentServerState.selected_path_name);
+              if (runBtn) runBtn.classList.remove('disabled');
+              visualizePath(selectedPath);
+            }
+          });
+        }
+      }
+
+      function visualizePath(pathData) {
+        if (pathVisualization) scene.remove(pathVisualization);
+
+        // pathData.poses is the array of Pose objects
+        // stored as { position: {x,y,z}, orientation: {x,y,z,w} }
+        const points = [];
+        pathData.poses.forEach(pose => {
+          // Need to reverse mapres scaling if it was applied during save?
+          // Actually wait, createPoseArrayFromPoints in savePath multiplies by mapres.
+          // So here we should divide by mapres to get back to grid coordinates for display?
+          // VISUALIZATION is in grid coords. POSE is in meter coords.
+          // stored poses are in METERS (x * mapres).
+          // So to display, we divide by mapres.
+          points.push(new THREE.Vector3(
+            pose.position.x / mapres,
+            pose.position.y / mapres,
+            0 // 2D map
+          ));
+        });
+
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const material = new THREE.LineBasicMaterial({ color: 0xFF00FF, linewidth: 3 });
+        pathVisualization = new THREE.Line(geometry, material);
+        pathVisualization.renderOrder = 20;
+        scene.add(pathVisualization);
+      }
+
+      function clearPathVisualization() {
+        if (pathVisualization) scene.remove(pathVisualization);
+        pathVisualization = null;
+        selectedPath = null;
+        const list = document.getElementById("path-list");
+        Array.from(list.children).forEach(child => child.style.backgroundColor = "transparent");
+        const runBtn = document.querySelector('[data-action="runpath"]');
+        if (runBtn) runBtn.classList.add('disabled');
+        // Clear server state for path
+        currentServerState.selected_path_name = null;
+        saveUIState();
+      }
+
       function createLabelText(text) {
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
@@ -823,6 +960,10 @@
           hideLoading();
         }
 
+        if (message.type === "path_list") {
+          updatePathList(message.data);
+        }
+
         if (message.type === "ui_state") {
           const oldMap = currentServerState.selected_map;
           currentServerState = message.data;
@@ -836,6 +977,7 @@
           // Re-render lists to show highlights (they use currentServerState internally)
           if (lastMapListData.length > 0) updateMapList(lastMapListData);
           if (lastWPListData.length > 0) updateWaypointList(lastWPListData);
+          if (lastPathListData.length > 0) updatePathList(lastPathListData);
         }
 
         if (message.type === "process_status") {
@@ -1121,380 +1263,468 @@
           const payload = {
             type: "process",
             name: "delete_waypoint",
-            data: {
-              map_name: selectedMap,
-              waypoint_name: wpName
-            }
+            data: { map_name: selectedMap, waypoint_name: wpName }
           };
           ws.send(JSON.stringify(payload));
-          M.toast({ html: `Deleting waypoint: ${wpName}`, classes: 'red' });
+          M.toast({ html: `Deleting waypoint ${wpName}...`, classes: 'red' });
         }
       }
 
-      function deleteMap() {
+      function savePath() {
         if (ws.readyState === WebSocket.OPEN) {
           if (!selectedMap) {
-            alert("Please select a map to delete first!");
+            alert("Please select a map first!");
+            return;
+          }
+          // Points are in points array. 
+          // We need to store them as Pose objects (like createPoseArrayFromPoints does)
+          // BUT persisted.
+          // createPoseArrayFromPoints returns an array of {position, orientation} objects (conceptually)
+          // Let's re-use that logic but structure it for saving.
+
+          if (points.length < 2) {
+            alert("Please draw a path with at least 2 points first.");
             return;
           }
 
-          if (confirm(`Are you sure you want to delete the map "${selectedMap}"? This cannot be undone.`)) {
-            const payload = { type: "process", name: "delete_map", data: selectedMap };
-            ws.send(JSON.stringify(payload));
-            M.toast({ html: `Deleting map: ${selectedMap}`, classes: 'red' });
+          const pathName = prompt("Enter a name for this path:", "Path_1");
+          if (!pathName) return;
 
-            // Clear selection
-            selectedMap = null;
-            const deleteBtn = document.querySelector('[data-action="deletemap"]');
-            if (deleteBtn) {
-              deleteBtn.classList.add('disabled');
-            }
+          const poses = [];
+          for (let i = 0; i < points.length; i++) {
+            let x = points[i].x * mapres;
+            let y = points[i].y * mapres;
+            let z = points[i].z;
+            let q = new THREE.Quaternion(); // Default identity orientation for points
+
+            // For orientation, we could point to the next point?
+            // createPoseArrayFromPoints creates simple objects, backend converts to PoseStamped
+            // Let's save the raw position/orientation data
+            poses.push({
+              position: { x: x, y: y, z: z },
+              orientation: { x: 0, y: 0, z: 0, w: 1 }
+            });
           }
-        } else {
-          console.error("WebSocket is not connected. State:", ws.readyState);
-          alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
-        }
-      }
 
-      // Camera rotation functions
-      function rotateCamera(degrees) {
-        cameraRotationAngle += degrees;
-        const radians = cameraRotationAngle * Math.PI / 180;
-        camera.rotation.z = radians;
-      }
-
-      function resetCamera() {
-        cameraRotationAngle = 0;
-        // Keep current zoom (Z position) and pan (X, Y position)
-        const currentX = camera.position.x;
-        const currentY = camera.position.y;
-        const currentZ = camera.position.z;
-
-        // Reset all rotation components
-        camera.rotation.set(0, 0, 0);
-        camera.position.set(currentX, currentY, currentZ);
-        camera.up.set(0, 1, 0);
-      }
-
-      // Rotation button events
-      document.getElementById("rotate-cw").addEventListener("click", () => {
-        rotateCamera(-90);
-      });
-
-      document.getElementById("rotate-ccw").addEventListener("click", () => {
-        rotateCamera(90);
-      });
-
-      document.getElementById("rotate-reset").addEventListener("click", () => {
-        resetCamera();
-      });
-
-      // Mouse event handlers
-      let startPoint = null;
-      let arrowGroup = null;
-
-      mainCanvas.addEventListener("mousedown", (event) => {
-        // Pan mode: Ctrl + Left Click
-        if (event.ctrlKey && event.button === 0) {
-          isPanning = true;
-          previousMousePosition = { x: event.clientX, y: event.clientY };
-          container.classList.add('panning');
-          event.preventDefault();
-          return;
-        }
-
-        // Existing functionality
-        if (enableNavToPose || enableSetPose || enableAddWaypoint) {
-          startPoint = getMousePosition(event);
-        }
-        if (enableDrawLine) {
-          const intersects = getMousePosition(event);
-          const point = intersects;
-          points.push(new THREE.Vector3(point.x, point.y, point.z));
-          if (line) {
-            scene.remove(line);
-          }
-          line = createPolyline(points);
-          scene.add(line);
-        }
-      });
-
-      mainCanvas.addEventListener("mousemove", (event) => {
-        // Handle panning
-        // Handle panning
-        if (isPanning) {
-          const deltaX = event.clientX - previousMousePosition.x;
-          const deltaY = event.clientY - previousMousePosition.y;
-
-          // Calculate pan amount based on camera distance
-          const panSpeed = 0.5;
-
-          // Account for camera rotation when panning
-          const rotationRad = camera.rotation.z;
-          const cosRot = Math.cos(rotationRad);
-          const sinRot = Math.sin(rotationRad);
-
-          // Screen Movement to World Movement Conversion
-          // Screen X+ is Right. Screen Y+ is Down.
-          // World X+ is Right. World Y+ is Up.
-          const screenDX = deltaX;
-          const screenDY = -deltaY; // Invert Y because screen Y is down, world Y is up
-
-          // Rotate vector to align with world axes
-          const worldDX = screenDX * cosRot - screenDY * sinRot;
-          const worldDY = screenDX * sinRot + screenDY * cosRot;
-
-          // Move camera opposite to drag to pan the view
-          camera.position.x -= worldDX * panSpeed;
-          camera.position.y -= worldDY * panSpeed;
-
-          previousMousePosition = { x: event.clientX, y: event.clientY };
-          event.preventDefault();
-          return;
-        }
-
-        // Existing functionality
-        if (enableNavToPose || enableSetPose || enableAddWaypoint) {
-          if (startPoint) {
-            const endPoint = getMousePosition(event);
-            if (endPoint) {
-              if (arrowGroup) {
-                scene.remove(arrowGroup);
+          const payload = {
+            type: "process",
+            name: "save_path",
+            data: {
+              map_name: selectedMap,
+              path: {
+                name: pathName,
+                poses: poses
               }
-              arrowGroup = createThickerArrow(startPoint, endPoint);
-              const resultQuaternion = computeOuaternionFrom2Points(startPoint, endPoint);
-              arrowPose = {
-                position: { x: startPoint.x * mapres, y: startPoint.y * mapres, z: startPoint.z * mapres },
-                orientation: { x: resultQuaternion.x, y: resultQuaternion.y, z: resultQuaternion.z, w: resultQuaternion.w }
-              };
-              scene.add(arrowGroup);
             }
-          }
-        }
-        if (enableDrawLine) {
-          if (points.length > 0) {
-            const intersects = getMousePosition(event);
-            const p1 = new THREE.Vector3(points[points.length - 1].x, points[points.length - 1].y, points[points.length - 1].z);
-            const p2 = new THREE.Vector3(intersects.x, intersects.y, intersects.z);
-            const line_cursor_p = [p1, p2];
-            if (line_cursor) {
-              scene.remove(line_cursor);
-            }
-            const geometry = new THREE.BufferGeometry().setFromPoints(line_cursor_p);
-            const material = new THREE.LineBasicMaterial({ color: 0x3300ff });
-            line_cursor = new THREE.Line(geometry, material);
-            line_cursor.renderOrder = 11;
-            scene.add(line_cursor);
-          }
-        }
-      });
+          };
+          ws.send(JSON.stringify(payload));
+          M.toast({ html: `Saving path ${pathName}...`, classes: 'green' });
 
-      mainCanvas.addEventListener("mouseup", (event) => {
-        // Stop panning
-        if (isPanning) {
-          isPanning = false;
-          container.classList.remove('panning');
+          // Clear drawing
+          if (line_cursor) scene.remove(line_cursor);
+          points = [];
+          enableDrawLine = false;
+          document.querySelector('[data-action="savepath"]').classList.add('disabled');
+        }
+      }
+
+      function deletePath(pathName) {
+        if (ws.readyState === WebSocket.OPEN) {
+          if (!selectedMap) return;
+          const payload = {
+            type: "process",
+            name: "delete_path",
+            data: { map_name: selectedMap, path_name: pathName }
+          };
+          ws.send(JSON.stringify(payload));
+          M.toast({ html: `Deleting path ${pathName}...`, classes: 'red' });
+        }
+      }
+    }
+
+    function deleteMap() {
+      if (ws.readyState === WebSocket.OPEN) {
+        if (!selectedMap) {
+          alert("Please select a map to delete first!");
           return;
         }
 
-        // Existing functionality
-        startPoint = null;
-        if (enableNavToPose) {
-          if (arrowGroup) {
-            const payload = { type: "action", name: "navtopose", data: arrowPose };
-            ws.send(JSON.stringify(payload));
-            enableNavToPose = false;
+        if (confirm(`Are you sure you want to delete the map "${selectedMap}"? This cannot be undone.`)) {
+          const payload = { type: "process", name: "delete_map", data: selectedMap };
+          ws.send(JSON.stringify(payload));
+          M.toast({ html: `Deleting map: ${selectedMap}`, classes: 'red' });
+
+          // Clear selection
+          selectedMap = null;
+          const deleteBtn = document.querySelector('[data-action="deletemap"]');
+          if (deleteBtn) {
+            deleteBtn.classList.add('disabled');
           }
         }
-        if (enableSetPose) {
-          if (arrowGroup) {
-            const payload = { type: "action", name: "set_pose", data: arrowPose };
-            ws.send(JSON.stringify(payload));
-            enableSetPose = false;
-          }
+      } else {
+        console.error("WebSocket is not connected. State:", ws.readyState);
+        alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
+      }
+    }
+
+    // Camera rotation functions
+    function rotateCamera(degrees) {
+      cameraRotationAngle += degrees;
+      const radians = cameraRotationAngle * Math.PI / 180;
+      camera.rotation.z = radians;
+    }
+
+    function resetCamera() {
+      cameraRotationAngle = 0;
+      // Keep current zoom (Z position) and pan (X, Y position)
+      const currentX = camera.position.x;
+      const currentY = camera.position.y;
+      const currentZ = camera.position.z;
+
+      // Reset all rotation components
+      camera.rotation.set(0, 0, 0);
+      camera.position.set(currentX, currentY, currentZ);
+      camera.up.set(0, 1, 0);
+    }
+
+    // Rotation button events
+    document.getElementById("rotate-cw").addEventListener("click", () => {
+      rotateCamera(-90);
+    });
+
+    document.getElementById("rotate-ccw").addEventListener("click", () => {
+      rotateCamera(90);
+    });
+
+    document.getElementById("rotate-reset").addEventListener("click", () => {
+      resetCamera();
+    });
+
+    // Mouse event handlers
+    let startPoint = null;
+    let arrowGroup = null;
+
+    mainCanvas.addEventListener("mousedown", (event) => {
+      // Pan mode: Ctrl + Left Click
+      if (event.ctrlKey && event.button === 0) {
+        isPanning = true;
+        previousMousePosition = { x: event.clientX, y: event.clientY };
+        container.classList.add('panning');
+        event.preventDefault();
+        return;
+      }
+
+      // Existing functionality
+      if (enableNavToPose || enableSetPose || enableAddWaypoint) {
+        startPoint = getMousePosition(event);
+      }
+      if (enableDrawLine) {
+        const intersects = getMousePosition(event);
+        const point = intersects;
+        points.push(new THREE.Vector3(point.x, point.y, point.z));
+        if (line) {
+          scene.remove(line);
         }
-        if (enableAddWaypoint) {
-          if (arrowGroup) {
-            const wpName = prompt("Enter Waypoint Name:");
-            if (wpName) {
-              const payload = {
-                type: "process",
-                name: "save_waypoint",
-                data: {
-                  map_name: selectedMap,
-                  waypoint: {
-                    name: wpName,
-                    position: arrowPose.position,
-                    orientation: arrowPose.orientation
-                  }
-                }
-              };
-              ws.send(JSON.stringify(payload));
-              M.toast({ html: `Saving waypoint ${wpName}...`, classes: 'rounded' });
-              enableAddWaypoint = false;
+        line = createPolyline(points);
+        scene.add(line);
+      }
+    });
+
+    mainCanvas.addEventListener("mousemove", (event) => {
+      // Handle panning
+      // Handle panning
+      if (isPanning) {
+        const deltaX = event.clientX - previousMousePosition.x;
+        const deltaY = event.clientY - previousMousePosition.y;
+
+        // Calculate pan amount based on camera distance
+        const panSpeed = 0.5;
+
+        // Account for camera rotation when panning
+        const rotationRad = camera.rotation.z;
+        const cosRot = Math.cos(rotationRad);
+        const sinRot = Math.sin(rotationRad);
+
+        // Screen Movement to World Movement Conversion
+        // Screen X+ is Right. Screen Y+ is Down.
+        // World X+ is Right. World Y+ is Up.
+        const screenDX = deltaX;
+        const screenDY = -deltaY; // Invert Y because screen Y is down, world Y is up
+
+        // Rotate vector to align with world axes
+        const worldDX = screenDX * cosRot - screenDY * sinRot;
+        const worldDY = screenDX * sinRot + screenDY * cosRot;
+
+        // Move camera opposite to drag to pan the view
+        camera.position.x -= worldDX * panSpeed;
+        camera.position.y -= worldDY * panSpeed;
+
+        previousMousePosition = { x: event.clientX, y: event.clientY };
+        event.preventDefault();
+        return;
+      }
+
+      // Existing functionality
+      if (enableNavToPose || enableSetPose || enableAddWaypoint) {
+        if (startPoint) {
+          const endPoint = getMousePosition(event);
+          if (endPoint) {
+            if (arrowGroup) {
+              scene.remove(arrowGroup);
             }
+            arrowGroup = createThickerArrow(startPoint, endPoint);
+            const resultQuaternion = computeOuaternionFrom2Points(startPoint, endPoint);
+            arrowPose = {
+              position: { x: startPoint.x * mapres, y: startPoint.y * mapres, z: startPoint.z * mapres },
+              orientation: { x: resultQuaternion.x, y: resultQuaternion.y, z: resultQuaternion.z, w: resultQuaternion.w }
+            };
+            scene.add(arrowGroup);
           }
         }
-        if (enableDrawLine) {
+      }
+      if (enableDrawLine) {
+        if (points.length > 0) {
+          const intersects = getMousePosition(event);
+          const p1 = new THREE.Vector3(points[points.length - 1].x, points[points.length - 1].y, points[points.length - 1].z);
+          const p2 = new THREE.Vector3(intersects.x, intersects.y, intersects.z);
+          const line_cursor_p = [p1, p2];
           if (line_cursor) {
             scene.remove(line_cursor);
           }
+          const geometry = new THREE.BufferGeometry().setFromPoints(line_cursor_p);
+          const material = new THREE.LineBasicMaterial({ color: 0x3300ff });
+          line_cursor = new THREE.Line(geometry, material);
+          line_cursor.renderOrder = 11;
+          scene.add(line_cursor);
         }
-      });
+      }
+    });
 
-      // Zoom with mouse wheel
-      mainCanvas.addEventListener("wheel", (event) => {
-        event.preventDefault();
-        const zoomSpeed = 10;
-        camera.position.z += event.deltaY * zoomSpeed * 0.01;
-        camera.position.z = Math.max(50, Math.min(1000, camera.position.z));
-      });
+    mainCanvas.addEventListener("mouseup", (event) => {
+      // Stop panning
+      if (isPanning) {
+        isPanning = false;
+        container.classList.remove('panning');
+        return;
+      }
 
-      const contextMenu = document.getElementById("context-menu");
-      renderer.domElement.addEventListener("contextmenu", (event) => {
-        event.preventDefault();
-        if (isPanning || event.ctrlKey) {
-          return;
+      // Existing functionality
+      startPoint = null;
+      if (enableNavToPose) {
+        if (arrowGroup) {
+          const payload = { type: "action", name: "navtopose", data: arrowPose };
+          ws.send(JSON.stringify(payload));
+          enableNavToPose = false;
         }
-        contextMenu.style.display = "block";
-        contextMenu.style.left = `${event.clientX}px`;
-        contextMenu.style.top = `${event.clientY}px`;
-      });
+      }
+      if (enableSetPose) {
+        if (arrowGroup) {
+          const payload = { type: "action", name: "set_pose", data: arrowPose };
+          ws.send(JSON.stringify(payload));
+          enableSetPose = false;
+        }
+      }
+      if (enableAddWaypoint) {
+        if (arrowGroup) {
+          const wpName = prompt("Enter Waypoint Name:");
+          if (wpName) {
+            const payload = {
+              type: "process",
+              name: "save_waypoint",
+              data: {
+                map_name: selectedMap,
+                waypoint: {
+                  name: wpName,
+                  position: arrowPose.position,
+                  orientation: arrowPose.orientation
+                }
+              }
+            };
+            ws.send(JSON.stringify(payload));
+            M.toast({ html: `Saving waypoint ${wpName}...`, classes: 'rounded' });
+            enableAddWaypoint = false;
+          }
+        }
+      }
+      if (enableDrawLine) {
+        if (line_cursor) {
+          scene.remove(line_cursor);
+        }
+      }
+    });
 
-      document.addEventListener("click", () => {
-        contextMenu.style.display = "none";
-      });
+    // Zoom with mouse wheel
+    mainCanvas.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      const zoomSpeed = 10;
+      camera.position.z += event.deltaY * zoomSpeed * 0.01;
+      camera.position.z = Math.max(50, Math.min(1000, camera.position.z));
+    });
 
-      document.getElementById("end").addEventListener("click", () => {
+    const contextMenu = document.getElementById("context-menu");
+    renderer.domElement.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      if (isPanning || event.ctrlKey) {
+        return;
+      }
+      contextMenu.style.display = "block";
+      contextMenu.style.left = `${event.clientX}px`;
+      contextMenu.style.top = `${event.clientY}px`;
+    });
+
+    document.addEventListener("click", () => {
+      contextMenu.style.display = "none";
+    });
+
+    document.getElementById("end").addEventListener("click", () => {
+      if (enableDrawLine) {
+        if (line_cursor) {
+          scene.remove(line_cursor);
+        }
+        enableDrawLine = false;
+      }
+      contextMenu.style.display = "none";
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    camera.position.set(0, 0, 500);
+
+    window.addEventListener("resize", () => {
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+    });
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" || event.keyCode === 27) {
         if (enableDrawLine) {
           if (line_cursor) {
             scene.remove(line_cursor);
           }
           enableDrawLine = false;
         }
-        contextMenu.style.display = "none";
-      });
-
-      function animate() {
-        requestAnimationFrame(animate);
-        renderer.render(scene, camera);
       }
-      animate();
+    });
 
-      camera.position.set(0, 0, 500);
-
-      window.addEventListener("resize", () => {
-        renderer.setSize(container.clientWidth, container.clientHeight);
-        camera.aspect = container.clientWidth / container.clientHeight;
-        camera.updateProjectionMatrix();
-      });
-
-      document.addEventListener("keydown", function (event) {
-        if (event.key === "Escape" || event.keyCode === 27) {
-          if (enableDrawLine) {
-            if (line_cursor) {
-              scene.remove(line_cursor);
-            }
+    document.querySelectorAll(".menu-btn").forEach((button) => {
+      button.addEventListener("click", function () {
+        const action = this.getAttribute("data-action");
+        switch (action) {
+          case "navtopose":
+            if (line_cursor) scene.remove(line_cursor);
+            enableNavToPose = true;
+            enableSetPose = false;
             enableDrawLine = false;
-          }
+            enablePathFollow = false;
+            break;
+          case "setpose":
+            if (line_cursor) scene.remove(line_cursor);
+            enableNavToPose = false;
+            enableSetPose = true;
+            enableDrawLine = false;
+            enablePathFollow = false;
+            break;
+          case "drawpath":
+            if (line_cursor) scene.remove(line_cursor);
+            if (line) {
+              scene.remove(line);
+              points.length = 0;
+            }
+            enableNavToPose = false;
+            enableSetPose = false;
+            enableDrawLine = true;
+            enablePathFollow = false;
+            break;
+          case "pathfollow":
+            if (line_cursor) scene.remove(line_cursor);
+            enableNavToPose = false;
+            enableSetPose = false;
+            enableDrawLine = false;
+            enablePathFollow = true;
+            // Instead of running immediately, we just finish drawing
+            // Use "Save Path" or "Path Follower" logic?
+            // The user said "Path Follower" button executes drawn path. 
+            // BUT now they want to SAVE it.
+            // Let's keep existing "pathfollow" behavior as "Run Drawn Path Immediately"
+            // AND enable the key "Save Path" button.
+            const poses = createPoseArrayFromPoints(points);
+            pathfollowNav(poses);
+            // Enable Save button now that we have points
+            document.querySelector('[data-action="savepath"]').classList.remove('disabled');
+            break;
+          case "savepath":
+            savePath();
+            break;
+          case "runpath":
+            if (selectedPath) {
+              pathfollowNav(selectedPath.poses);
+            }
+            break;
+          case "clearpath":
+            clearPathVisualization();
+            break;
+          case "startminimal":
+            startMinimal();
+            break;
+          case "stopminimal":
+            stopMinimal();
+            break;
+          case "startslam":
+            startSlam();
+            break;
+          case "stopslam":
+            stopSlam();
+            break;
+          case "savemap":
+            saveMap();
+            break;
+          case "startnav":
+            startNav();
+            break;
+          case "stopnav":
+            stopNav();
+            break;
+          case "deletemap":
+            deleteMap();
+            break;
+          case "addwaypoint":
+            if (!selectedMap) {
+              alert("Please select a map first!");
+              return;
+            }
+            if (line_cursor) scene.remove(line_cursor);
+            enableNavToPose = false;
+            enableSetPose = false;
+            enableAddWaypoint = true;
+            enableDrawLine = false;
+            enablePathFollow = false;
+            M.toast({ html: 'Click and drag on map to set waypoint', classes: 'rounded' });
+            break;
+          case "gotowaypoint":
+            if (selectedWaypoint) {
+              const payload = { type: "action", name: "navtopose", data: selectedWaypoint };
+              ws.send(JSON.stringify(payload));
+              M.toast({ html: `Navigating to ${selectedWaypoint.name}...`, classes: 'blue' });
+            }
+            break;
+          case "none":
+            if (line_cursor) scene.remove(line_cursor);
+            enableNavToPose = false;
+            enableSetPose = false;
+            enableDrawLine = false;
+            enablePathFollow = false;
+            break;
         }
       });
+    });
 
-      document.querySelectorAll(".menu-btn").forEach((button) => {
-        button.addEventListener("click", function () {
-          const action = this.getAttribute("data-action");
-          switch (action) {
-            case "navtopose":
-              if (line_cursor) scene.remove(line_cursor);
-              enableNavToPose = true;
-              enableSetPose = false;
-              enableDrawLine = false;
-              enablePathFollow = false;
-              break;
-            case "setpose":
-              if (line_cursor) scene.remove(line_cursor);
-              enableNavToPose = false;
-              enableSetPose = true;
-              enableDrawLine = false;
-              enablePathFollow = false;
-              break;
-            case "drawpath":
-              if (line_cursor) scene.remove(line_cursor);
-              if (line) {
-                scene.remove(line);
-                points.length = 0;
-              }
-              enableNavToPose = false;
-              enableSetPose = false;
-              enableDrawLine = true;
-              enablePathFollow = false;
-              break;
-            case "pathfollow":
-              if (line_cursor) scene.remove(line_cursor);
-              enableNavToPose = false;
-              enableSetPose = false;
-              enableDrawLine = false;
-              enablePathFollow = true;
-              const poses = createPoseArrayFromPoints(points);
-              pathfollowNav(poses);
-              break;
-            case "startminimal":
-              startMinimal();
-              break;
-            case "stopminimal":
-              stopMinimal();
-              break;
-            case "startslam":
-              startSlam();
-              break;
-            case "stopslam":
-              stopSlam();
-              break;
-            case "savemap":
-              saveMap();
-              break;
-            case "startnav":
-              startNav();
-              break;
-            case "stopnav":
-              stopNav();
-              break;
-            case "deletemap":
-              deleteMap();
-              break;
-            case "addwaypoint":
-              if (!selectedMap) {
-                alert("Please select a map first!");
-                return;
-              }
-              if (line_cursor) scene.remove(line_cursor);
-              enableNavToPose = false;
-              enableSetPose = false;
-              enableAddWaypoint = true;
-              enableDrawLine = false;
-              enablePathFollow = false;
-              M.toast({ html: 'Click and drag on map to set waypoint', classes: 'rounded' });
-              break;
-            case "gotowaypoint":
-              if (selectedWaypoint) {
-                const payload = { type: "action", name: "navtopose", data: selectedWaypoint };
-                ws.send(JSON.stringify(payload));
-                M.toast({ html: `Navigating to ${selectedWaypoint.name}...`, classes: 'blue' });
-              }
-              break;
-            case "none":
-              if (line_cursor) scene.remove(line_cursor);
-              enableNavToPose = false;
-              enableSetPose = false;
-              enableDrawLine = false;
-              enablePathFollow = false;
-              break;
-          }
-        });
-      });
-
-      // Initialize button states
-      updateButtonStates();
+    // Initialize button states
+    updateButtonStates();
     }
 
     document.addEventListener("DOMContentLoaded", initThreeJS);
