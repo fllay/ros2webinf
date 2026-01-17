@@ -801,24 +801,38 @@
             Array.from(list.children).forEach(child => child.style.backgroundColor = "transparent");
             li.style.backgroundColor = "#e0e0e0";
             selectedPath = p;
-            if (runBtn) runBtn.classList.remove('disabled');
+            if (runBtn) {
+              runBtn.classList.remove('disabled');
+              console.log("Enabled Run Path button for:", p.name);
+            }
             visualizePath(p);
-            saveUIState(); // We might need to update saveUIState to include path
+
+            // Update server state 
+            currentServerState.selected_path_name = p.name;
+            saveUIState();
           };
           list.appendChild(li);
         });
 
         // HIGHLIGHT if matches server state
         if (currentServerState.selected_path_name) {
+          let found = false;
           Array.from(list.children).forEach(li => {
             const span = li.querySelector('span');
             if (span && span.textContent === currentServerState.selected_path_name) {
               li.style.backgroundColor = "#e0e0e0";
               selectedPath = pathList.find(p => p.name === currentServerState.selected_path_name);
-              if (runBtn) runBtn.classList.remove('disabled');
-              visualizePath(selectedPath);
+              if (selectedPath) {
+                if (runBtn) runBtn.classList.remove('disabled');
+                visualizePath(selectedPath);
+                found = true;
+              }
             }
           });
+          if (!found) {
+            // Reset if not found
+            currentServerState.selected_path_name = null;
+          }
         }
       }
 
