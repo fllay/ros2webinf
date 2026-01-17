@@ -378,10 +378,18 @@
       let selectedMap = null;
       let selectedWaypoint = null;
 
-      // Process states
       let isMinimalRunning = false;
       let isSlamRunning = false;
       let isNavRunning = false;
+
+      // Server-side UI State
+      let currentServerState = {
+        selected_map: null,
+        selected_waypoint_name: null
+      };
+
+      let lastMapListData = [];
+      let lastWPListData = [];
 
       const mainCanvas = renderer.domElement;
 
@@ -392,6 +400,30 @@
 
       function hideLoading() {
         document.getElementById('loading-overlay').style.display = 'none';
+      }
+
+      // STATE SYNC: Save locally and to Robot
+      function saveUIState() {
+        const state = {
+          selected_map: selectedMap,
+          selected_waypoint_name: selectedWaypoint ? selectedWaypoint.name : null
+        };
+        // Save to LocalStorage as a fallback
+        localStorage.setItem('ros2_ui_state', JSON.stringify(state));
+
+        // Sync to the Robot (Backend)
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: "ui_state",
+            data: state
+          }));
+        }
+      }
+
+      function loadUIState() {
+        const saved = localStorage.getItem('ros2_ui_state');
+        if (saved) return JSON.parse(saved);
+        return null;
       }
 
       function updateButtonStates() {
@@ -504,6 +536,7 @@
       }
 
       function updateMapList(maps) {
+        lastMapListData = maps;
         const list = document.getElementById("map-list");
         const deleteBtn = document.querySelector('[data-action="deletemap"]');
 
@@ -533,7 +566,18 @@
             }
 
             M.toast({ html: `Selected map: ${mapName}`, classes: 'rounded' });
+            saveUIState();
           };
+
+          // HIGHLIGHT if it matches server state
+          if (currentServerState.selected_map === mapName) {
+            li.style.backgroundColor = "#e0e0e0";
+            selectedMap = mapName;
+            const deleteBtn = document.querySelector('[data-action="deletemap"]');
+            if (deleteBtn) deleteBtn.classList.remove('disabled');
+            // Don't auto-request waypoints here to avoid loops, 
+            // the ui_state handler will handle the initial request.
+          }
 
           list.appendChild(li);
         });
@@ -545,6 +589,7 @@
       }
 
       function updateWaypointList(wpList) {
+        lastWPListData = wpList;
         const list = document.getElementById("waypoint-list");
         const goBtn = document.querySelector('[data-action="gotowaypoint"]');
         list.innerHTML = "";
@@ -595,12 +640,25 @@
             li.style.backgroundColor = "#e0e0e0";
             selectedWaypoint = wp;
             if (goBtn) goBtn.classList.remove('disabled');
+            saveUIState();
           };
           list.appendChild(li);
         });
 
         // Update markers on map
         updateWaypointMarkers(wpList);
+
+        // HIGHLIGHT if it matches server state
+        if (currentServerState.selected_waypoint_name) {
+          Array.from(list.children).forEach(li => {
+            const span = li.querySelector('span');
+            if (span && span.textContent === currentServerState.selected_waypoint_name) {
+              li.style.backgroundColor = "#e0e0e0";
+              selectedWaypoint = wpList.find(w => w.name === currentServerState.selected_waypoint_name);
+              if (goBtn) goBtn.classList.remove('disabled');
+            }
+          });
+        }
       }
 
       function updateWaypointMarkers(wpList) {
@@ -764,6 +822,22 @@
           updateMapList(message.data);
           hideLoading();
         }
+
+        if (message.type === "ui_state") {
+          const oldMap = currentServerState.selected_map;
+          currentServerState = message.data;
+
+          // If map changed from server, refresh list and load waypoints
+          if (currentServerState.selected_map && currentServerState.selected_map !== oldMap) {
+            // Request waypoints for the newly synced map
+            ws.send(JSON.stringify({ type: "process", name: "load_waypoints", data: currentServerState.selected_map }));
+          }
+
+          // Re-render lists to show highlights (they use currentServerState internally)
+          if (lastMapListData.length > 0) updateMapList(lastMapListData);
+          if (lastWPListData.length > 0) updateWaypointList(lastWPListData);
+        }
+
         if (message.type === "process_status") {
           // Update state
           const status = message.status === "running";

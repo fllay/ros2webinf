@@ -156,6 +156,12 @@ class WebSocketROS2Bridge(Node):
         self.launch_threads = {}
         self.launch_tasks = {}
 
+        # Global UI State
+        self.current_ui_state = {
+            "selected_map": None,
+            "selected_waypoint_name": None
+        }
+
         
 
 
@@ -475,12 +481,30 @@ class WebSocketROS2Bridge(Node):
                 "status": "running"
             }))
 
+        # Send current UI state
+        await websocket.send(json.dumps({
+            "type": "ui_state",
+            "data": self.current_ui_state
+        }))
+
         try:
             async for message in websocket:
                 # Process incoming messages here
                 #print(f"Received message: {message}")
                 json_dada = json.loads(message)
-                if(json_dada['type'] == "action"):
+                
+                if json_dada['type'] == "ui_state":
+                    # Update global state
+                    for key in json_dada['data']:
+                        if key in self.current_ui_state:
+                            self.current_ui_state[key] = json_dada['data'][key]
+                    # Broadcast to everyone else
+                    await self.send_data_to_clients(json.dumps({
+                        "type": "ui_state",
+                        "data": self.current_ui_state
+                    }))
+                
+                elif(json_dada['type'] == "action"):
                     if(json_dada['name'] == "navtopose"):
                         print(json_dada['data'])
                         pp = self.convert_json_pose_to_poasestamp(json_dada['data'])
