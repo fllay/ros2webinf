@@ -545,70 +545,26 @@ class WebSocketROS2Bridge(Node):
                         self.send_goal_pose(pp)
                     if(json_dada['name'] == "set_pose"):
                         self.publish_initial_pose(json_dada['data'])
+
                     if(json_dada['name'] == "pathfollow"):
                         print("Get follow path")
-
-                        #print(json_dada['data'])
-                        g_path = self.convert_json_pose_array_to_path(json_dada['data'])
-                        poses = np.array([[pose.pose.position.x, pose.pose.position.y] for pose in g_path.poses])
-
-                        # x = poses[:, 0]
-                        # y = poses[:, 1]
-
-                        # # Remove duplicate points and sort by x value
-                        # unique_indices = np.unique(x, return_index=True)
-                        # x_unique = x[unique_indices[1]]
-                        # y_unique = y[unique_indices[1]]
-                        
-                        # # Sort by x values
-                        # sorted_indices = np.argsort(x_unique)
-                        # x_sorted = x_unique[sorted_indices]
-                        # y_sorted = y_unique[sorted_indices]
-
-                        # # Create a UnivariateSpline interpolation function
-                        # spline = UnivariateSpline(x_sorted, y_sorted, s=1)  # s is the smoothing factor
-
-                        # # Generate new x values
-                        # x_new = np.linspace(min(x_sorted), max(x_sorted), 100)
-                        # y_new = spline(x_new)
-
-                        # # Create a new Path message for the smoothed path
-                        # smoothed_path = Path()
-                        # smoothed_path.header = g_path.header
-                        # for xi, yi in zip(x_new, y_new):
-                        #     pose = PoseStamped()
-                        #     pose.header = g_path.header
-                        #     pose.pose.position.x = xi
-                        #     pose.pose.position.y = yi
-                        #     pose.pose.orientation.w = 1.0
-                        #     smoothed_path.poses.append(pose)
-
-                        
-                                # Create a goal message
-                        # goal_msg = FollowPath.Goal()
-                        # goal_msg.path = self.create_path()
-                        # goal_msg.controller_id = ''  # Use default controller
-                        # goal_msg.goal_checker_id = ''  # Use default goal checker
-                        # print(goal_msg)
-                        #self.smooth_path_publisher.publish(smoothed_path)
-
-                        #goal_msg1 = FollowPath.Goal()
-                        #goal_msg1.path = g_path
-                        #goal_msg1.controller_id = ''  # Use default controller
-                        #goal_msg1.goal_checker_id = ''  # Use default goal checker
-                        # print(goal_msg1)
-                        #self.send_goal_path(goal_msg1)
-                        
-                        # --- NavigateThroughPoses ---
-                        poses_p = self.convert_json_pose_array_to_poses(json_dada['data'])
-                        parray = self.convert_json_pose_array_to_pose_array(json_dada['data'])
-                        print("Publishing pose array for viz")
-                        self.pose_array_publisher.publish(parray)
-                        
-                        goal_poses = NavigateThroughPoses.Goal()
-                        goal_poses.poses = poses_p
-                        print(goal_poses)
-                        self.send_goal_through_poses(goal_poses)
+                        try:
+                            # --- NavigateThroughPoses ---
+                            poses_p = self.convert_json_pose_array_to_poses(json_dada['data'])
+                            
+                            # Publish for visualization (Optional, might be heavy if big)
+                            parray = self.convert_json_pose_array_to_pose_array(json_dada['data'])
+                            self.pose_array_publisher.publish(parray)
+                            
+                            goal_poses = NavigateThroughPoses.Goal()
+                            goal_poses.poses = poses_p
+                            
+                            # print("Sending goal poses...") # Reduce spam
+                            self.send_goal_through_poses(goal_poses)
+                        except Exception as e:
+                            print(f"Error in pathfollow: {e}")
+                            import traceback
+                            traceback.print_exc()
                 
                     
                 elif(json_dada['type'] == "topic"):
