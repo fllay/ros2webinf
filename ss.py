@@ -162,6 +162,10 @@ class WebSocketROS2Bridge(Node):
             "selected_waypoint_name": None
         }
 
+        # Message Caching for new clients
+        self.last_map_json = None
+        self.last_pose_json = None
+
         
 
 
@@ -260,6 +264,7 @@ class WebSocketROS2Bridge(Node):
     def map_callback(self, msg):
         # Prepare map data to be sent through WebSocket
         map_data_json = self.ros2_msg_to_json('map',msg)
+        self.last_map_json = map_data_json
         asyncio.run(self.send_data_to_clients(map_data_json))
 
     def scan_callback(self, scan_msg):
@@ -319,6 +324,7 @@ class WebSocketROS2Bridge(Node):
             # Publish the pose
             #self.pose_publisher.publish(pose_in_map)
             pose_in_map_json = self.ros2_msg_to_json('robot_pose_in_map',pose_in_map)
+            self.last_pose_json = pose_in_map_json
             asyncio.run(self.send_data_to_clients(pose_in_map_json))
        
         except (LookupException, ConnectivityException, ExtrapolationException) as e:
@@ -486,6 +492,12 @@ class WebSocketROS2Bridge(Node):
             "type": "ui_state",
             "data": self.current_ui_state
         }))
+
+        # Send cached map and pose if available
+        if self.last_map_json:
+            await websocket.send(self.last_map_json)
+        if self.last_pose_json:
+            await websocket.send(self.last_pose_json)
 
         try:
             async for message in websocket:
