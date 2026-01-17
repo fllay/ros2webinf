@@ -1340,393 +1340,393 @@
           M.toast({ html: `Deleting path ${pathName}...`, classes: 'red' });
         }
       }
-    }
 
-    function deleteMap() {
-      if (ws.readyState === WebSocket.OPEN) {
-        if (!selectedMap) {
-          alert("Please select a map to delete first!");
+
+      function deleteMap() {
+        if (ws.readyState === WebSocket.OPEN) {
+          if (!selectedMap) {
+            alert("Please select a map to delete first!");
+            return;
+          }
+
+          if (confirm(`Are you sure you want to delete the map "${selectedMap}"? This cannot be undone.`)) {
+            const payload = { type: "process", name: "delete_map", data: selectedMap };
+            ws.send(JSON.stringify(payload));
+            M.toast({ html: `Deleting map: ${selectedMap}`, classes: 'red' });
+
+            // Clear selection
+            selectedMap = null;
+            const deleteBtn = document.querySelector('[data-action="deletemap"]');
+            if (deleteBtn) {
+              deleteBtn.classList.add('disabled');
+            }
+          }
+        } else {
+          console.error("WebSocket is not connected. State:", ws.readyState);
+          alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
+        }
+      }
+
+      // Camera rotation functions
+      function rotateCamera(degrees) {
+        cameraRotationAngle += degrees;
+        const radians = cameraRotationAngle * Math.PI / 180;
+        camera.rotation.z = radians;
+      }
+
+      function resetCamera() {
+        cameraRotationAngle = 0;
+        // Keep current zoom (Z position) and pan (X, Y position)
+        const currentX = camera.position.x;
+        const currentY = camera.position.y;
+        const currentZ = camera.position.z;
+
+        // Reset all rotation components
+        camera.rotation.set(0, 0, 0);
+        camera.position.set(currentX, currentY, currentZ);
+        camera.up.set(0, 1, 0);
+      }
+
+      // Rotation button events
+      document.getElementById("rotate-cw").addEventListener("click", () => {
+        rotateCamera(-90);
+      });
+
+      document.getElementById("rotate-ccw").addEventListener("click", () => {
+        rotateCamera(90);
+      });
+
+      document.getElementById("rotate-reset").addEventListener("click", () => {
+        resetCamera();
+      });
+
+      // Mouse event handlers
+      let startPoint = null;
+      let arrowGroup = null;
+
+      mainCanvas.addEventListener("mousedown", (event) => {
+        // Pan mode: Ctrl + Left Click
+        if (event.ctrlKey && event.button === 0) {
+          isPanning = true;
+          previousMousePosition = { x: event.clientX, y: event.clientY };
+          container.classList.add('panning');
+          event.preventDefault();
           return;
         }
 
-        if (confirm(`Are you sure you want to delete the map "${selectedMap}"? This cannot be undone.`)) {
-          const payload = { type: "process", name: "delete_map", data: selectedMap };
-          ws.send(JSON.stringify(payload));
-          M.toast({ html: `Deleting map: ${selectedMap}`, classes: 'red' });
-
-          // Clear selection
-          selectedMap = null;
-          const deleteBtn = document.querySelector('[data-action="deletemap"]');
-          if (deleteBtn) {
-            deleteBtn.classList.add('disabled');
-          }
+        // Existing functionality
+        if (enableNavToPose || enableSetPose || enableAddWaypoint) {
+          startPoint = getMousePosition(event);
         }
-      } else {
-        console.error("WebSocket is not connected. State:", ws.readyState);
-        alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
-      }
-    }
-
-    // Camera rotation functions
-    function rotateCamera(degrees) {
-      cameraRotationAngle += degrees;
-      const radians = cameraRotationAngle * Math.PI / 180;
-      camera.rotation.z = radians;
-    }
-
-    function resetCamera() {
-      cameraRotationAngle = 0;
-      // Keep current zoom (Z position) and pan (X, Y position)
-      const currentX = camera.position.x;
-      const currentY = camera.position.y;
-      const currentZ = camera.position.z;
-
-      // Reset all rotation components
-      camera.rotation.set(0, 0, 0);
-      camera.position.set(currentX, currentY, currentZ);
-      camera.up.set(0, 1, 0);
-    }
-
-    // Rotation button events
-    document.getElementById("rotate-cw").addEventListener("click", () => {
-      rotateCamera(-90);
-    });
-
-    document.getElementById("rotate-ccw").addEventListener("click", () => {
-      rotateCamera(90);
-    });
-
-    document.getElementById("rotate-reset").addEventListener("click", () => {
-      resetCamera();
-    });
-
-    // Mouse event handlers
-    let startPoint = null;
-    let arrowGroup = null;
-
-    mainCanvas.addEventListener("mousedown", (event) => {
-      // Pan mode: Ctrl + Left Click
-      if (event.ctrlKey && event.button === 0) {
-        isPanning = true;
-        previousMousePosition = { x: event.clientX, y: event.clientY };
-        container.classList.add('panning');
-        event.preventDefault();
-        return;
-      }
-
-      // Existing functionality
-      if (enableNavToPose || enableSetPose || enableAddWaypoint) {
-        startPoint = getMousePosition(event);
-      }
-      if (enableDrawLine) {
-        const intersects = getMousePosition(event);
-        const point = intersects;
-        points.push(new THREE.Vector3(point.x, point.y, point.z));
-        if (line) {
-          scene.remove(line);
-        }
-        line = createPolyline(points);
-        scene.add(line);
-      }
-    });
-
-    mainCanvas.addEventListener("mousemove", (event) => {
-      // Handle panning
-      // Handle panning
-      if (isPanning) {
-        const deltaX = event.clientX - previousMousePosition.x;
-        const deltaY = event.clientY - previousMousePosition.y;
-
-        // Calculate pan amount based on camera distance
-        const panSpeed = 0.5;
-
-        // Account for camera rotation when panning
-        const rotationRad = camera.rotation.z;
-        const cosRot = Math.cos(rotationRad);
-        const sinRot = Math.sin(rotationRad);
-
-        // Screen Movement to World Movement Conversion
-        // Screen X+ is Right. Screen Y+ is Down.
-        // World X+ is Right. World Y+ is Up.
-        const screenDX = deltaX;
-        const screenDY = -deltaY; // Invert Y because screen Y is down, world Y is up
-
-        // Rotate vector to align with world axes
-        const worldDX = screenDX * cosRot - screenDY * sinRot;
-        const worldDY = screenDX * sinRot + screenDY * cosRot;
-
-        // Move camera opposite to drag to pan the view
-        camera.position.x -= worldDX * panSpeed;
-        camera.position.y -= worldDY * panSpeed;
-
-        previousMousePosition = { x: event.clientX, y: event.clientY };
-        event.preventDefault();
-        return;
-      }
-
-      // Existing functionality
-      if (enableNavToPose || enableSetPose || enableAddWaypoint) {
-        if (startPoint) {
-          const endPoint = getMousePosition(event);
-          if (endPoint) {
-            if (arrowGroup) {
-              scene.remove(arrowGroup);
-            }
-            arrowGroup = createThickerArrow(startPoint, endPoint);
-            const resultQuaternion = computeOuaternionFrom2Points(startPoint, endPoint);
-            arrowPose = {
-              position: { x: startPoint.x * mapres, y: startPoint.y * mapres, z: startPoint.z * mapres },
-              orientation: { x: resultQuaternion.x, y: resultQuaternion.y, z: resultQuaternion.z, w: resultQuaternion.w }
-            };
-            scene.add(arrowGroup);
-          }
-        }
-      }
-      if (enableDrawLine) {
-        if (points.length > 0) {
+        if (enableDrawLine) {
           const intersects = getMousePosition(event);
-          const p1 = new THREE.Vector3(points[points.length - 1].x, points[points.length - 1].y, points[points.length - 1].z);
-          const p2 = new THREE.Vector3(intersects.x, intersects.y, intersects.z);
-          const line_cursor_p = [p1, p2];
+          const point = intersects;
+          points.push(new THREE.Vector3(point.x, point.y, point.z));
+          if (line) {
+            scene.remove(line);
+          }
+          line = createPolyline(points);
+          scene.add(line);
+        }
+      });
+
+      mainCanvas.addEventListener("mousemove", (event) => {
+        // Handle panning
+        // Handle panning
+        if (isPanning) {
+          const deltaX = event.clientX - previousMousePosition.x;
+          const deltaY = event.clientY - previousMousePosition.y;
+
+          // Calculate pan amount based on camera distance
+          const panSpeed = 0.5;
+
+          // Account for camera rotation when panning
+          const rotationRad = camera.rotation.z;
+          const cosRot = Math.cos(rotationRad);
+          const sinRot = Math.sin(rotationRad);
+
+          // Screen Movement to World Movement Conversion
+          // Screen X+ is Right. Screen Y+ is Down.
+          // World X+ is Right. World Y+ is Up.
+          const screenDX = deltaX;
+          const screenDY = -deltaY; // Invert Y because screen Y is down, world Y is up
+
+          // Rotate vector to align with world axes
+          const worldDX = screenDX * cosRot - screenDY * sinRot;
+          const worldDY = screenDX * sinRot + screenDY * cosRot;
+
+          // Move camera opposite to drag to pan the view
+          camera.position.x -= worldDX * panSpeed;
+          camera.position.y -= worldDY * panSpeed;
+
+          previousMousePosition = { x: event.clientX, y: event.clientY };
+          event.preventDefault();
+          return;
+        }
+
+        // Existing functionality
+        if (enableNavToPose || enableSetPose || enableAddWaypoint) {
+          if (startPoint) {
+            const endPoint = getMousePosition(event);
+            if (endPoint) {
+              if (arrowGroup) {
+                scene.remove(arrowGroup);
+              }
+              arrowGroup = createThickerArrow(startPoint, endPoint);
+              const resultQuaternion = computeOuaternionFrom2Points(startPoint, endPoint);
+              arrowPose = {
+                position: { x: startPoint.x * mapres, y: startPoint.y * mapres, z: startPoint.z * mapres },
+                orientation: { x: resultQuaternion.x, y: resultQuaternion.y, z: resultQuaternion.z, w: resultQuaternion.w }
+              };
+              scene.add(arrowGroup);
+            }
+          }
+        }
+        if (enableDrawLine) {
+          if (points.length > 0) {
+            const intersects = getMousePosition(event);
+            const p1 = new THREE.Vector3(points[points.length - 1].x, points[points.length - 1].y, points[points.length - 1].z);
+            const p2 = new THREE.Vector3(intersects.x, intersects.y, intersects.z);
+            const line_cursor_p = [p1, p2];
+            if (line_cursor) {
+              scene.remove(line_cursor);
+            }
+            const geometry = new THREE.BufferGeometry().setFromPoints(line_cursor_p);
+            const material = new THREE.LineBasicMaterial({ color: 0x3300ff });
+            line_cursor = new THREE.Line(geometry, material);
+            line_cursor.renderOrder = 11;
+            scene.add(line_cursor);
+          }
+        }
+      });
+
+      mainCanvas.addEventListener("mouseup", (event) => {
+        // Stop panning
+        if (isPanning) {
+          isPanning = false;
+          container.classList.remove('panning');
+          return;
+        }
+
+        // Existing functionality
+        startPoint = null;
+        if (enableNavToPose) {
+          if (arrowGroup) {
+            const payload = { type: "action", name: "navtopose", data: arrowPose };
+            ws.send(JSON.stringify(payload));
+            enableNavToPose = false;
+          }
+        }
+        if (enableSetPose) {
+          if (arrowGroup) {
+            const payload = { type: "action", name: "set_pose", data: arrowPose };
+            ws.send(JSON.stringify(payload));
+            enableSetPose = false;
+          }
+        }
+        if (enableAddWaypoint) {
+          if (arrowGroup) {
+            const wpName = prompt("Enter Waypoint Name:");
+            if (wpName) {
+              const payload = {
+                type: "process",
+                name: "save_waypoint",
+                data: {
+                  map_name: selectedMap,
+                  waypoint: {
+                    name: wpName,
+                    position: arrowPose.position,
+                    orientation: arrowPose.orientation
+                  }
+                }
+              };
+              ws.send(JSON.stringify(payload));
+              M.toast({ html: `Saving waypoint ${wpName}...`, classes: 'rounded' });
+              enableAddWaypoint = false;
+            }
+          }
+        }
+        if (enableDrawLine) {
           if (line_cursor) {
             scene.remove(line_cursor);
           }
-          const geometry = new THREE.BufferGeometry().setFromPoints(line_cursor_p);
-          const material = new THREE.LineBasicMaterial({ color: 0x3300ff });
-          line_cursor = new THREE.Line(geometry, material);
-          line_cursor.renderOrder = 11;
-          scene.add(line_cursor);
         }
-      }
-    });
+      });
 
-    mainCanvas.addEventListener("mouseup", (event) => {
-      // Stop panning
-      if (isPanning) {
-        isPanning = false;
-        container.classList.remove('panning');
-        return;
-      }
+      // Zoom with mouse wheel
+      mainCanvas.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        const zoomSpeed = 10;
+        camera.position.z += event.deltaY * zoomSpeed * 0.01;
+        camera.position.z = Math.max(50, Math.min(1000, camera.position.z));
+      });
 
-      // Existing functionality
-      startPoint = null;
-      if (enableNavToPose) {
-        if (arrowGroup) {
-          const payload = { type: "action", name: "navtopose", data: arrowPose };
-          ws.send(JSON.stringify(payload));
-          enableNavToPose = false;
+      const contextMenu = document.getElementById("context-menu");
+      renderer.domElement.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        if (isPanning || event.ctrlKey) {
+          return;
         }
-      }
-      if (enableSetPose) {
-        if (arrowGroup) {
-          const payload = { type: "action", name: "set_pose", data: arrowPose };
-          ws.send(JSON.stringify(payload));
-          enableSetPose = false;
-        }
-      }
-      if (enableAddWaypoint) {
-        if (arrowGroup) {
-          const wpName = prompt("Enter Waypoint Name:");
-          if (wpName) {
-            const payload = {
-              type: "process",
-              name: "save_waypoint",
-              data: {
-                map_name: selectedMap,
-                waypoint: {
-                  name: wpName,
-                  position: arrowPose.position,
-                  orientation: arrowPose.orientation
-                }
-              }
-            };
-            ws.send(JSON.stringify(payload));
-            M.toast({ html: `Saving waypoint ${wpName}...`, classes: 'rounded' });
-            enableAddWaypoint = false;
-          }
-        }
-      }
-      if (enableDrawLine) {
-        if (line_cursor) {
-          scene.remove(line_cursor);
-        }
-      }
-    });
+        contextMenu.style.display = "block";
+        contextMenu.style.left = `${event.clientX}px`;
+        contextMenu.style.top = `${event.clientY}px`;
+      });
 
-    // Zoom with mouse wheel
-    mainCanvas.addEventListener("wheel", (event) => {
-      event.preventDefault();
-      const zoomSpeed = 10;
-      camera.position.z += event.deltaY * zoomSpeed * 0.01;
-      camera.position.z = Math.max(50, Math.min(1000, camera.position.z));
-    });
+      document.addEventListener("click", () => {
+        contextMenu.style.display = "none";
+      });
 
-    const contextMenu = document.getElementById("context-menu");
-    renderer.domElement.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      if (isPanning || event.ctrlKey) {
-        return;
-      }
-      contextMenu.style.display = "block";
-      contextMenu.style.left = `${event.clientX}px`;
-      contextMenu.style.top = `${event.clientY}px`;
-    });
-
-    document.addEventListener("click", () => {
-      contextMenu.style.display = "none";
-    });
-
-    document.getElementById("end").addEventListener("click", () => {
-      if (enableDrawLine) {
-        if (line_cursor) {
-          scene.remove(line_cursor);
-        }
-        enableDrawLine = false;
-      }
-      contextMenu.style.display = "none";
-    });
-
-    function animate() {
-      requestAnimationFrame(animate);
-      renderer.render(scene, camera);
-    }
-    animate();
-
-    camera.position.set(0, 0, 500);
-
-    window.addEventListener("resize", () => {
-      renderer.setSize(container.clientWidth, container.clientHeight);
-      camera.aspect = container.clientWidth / container.clientHeight;
-      camera.updateProjectionMatrix();
-    });
-
-    document.addEventListener("keydown", function (event) {
-      if (event.key === "Escape" || event.keyCode === 27) {
+      document.getElementById("end").addEventListener("click", () => {
         if (enableDrawLine) {
           if (line_cursor) {
             scene.remove(line_cursor);
           }
           enableDrawLine = false;
         }
-      }
-    });
+        contextMenu.style.display = "none";
+      });
 
-    document.querySelectorAll(".menu-btn").forEach((button) => {
-      button.addEventListener("click", function () {
-        const action = this.getAttribute("data-action");
-        switch (action) {
-          case "navtopose":
-            if (line_cursor) scene.remove(line_cursor);
-            enableNavToPose = true;
-            enableSetPose = false;
-            enableDrawLine = false;
-            enablePathFollow = false;
-            break;
-          case "setpose":
-            if (line_cursor) scene.remove(line_cursor);
-            enableNavToPose = false;
-            enableSetPose = true;
-            enableDrawLine = false;
-            enablePathFollow = false;
-            break;
-          case "drawpath":
-            if (line_cursor) scene.remove(line_cursor);
-            if (line) {
-              scene.remove(line);
-              points.length = 0;
+      function animate() {
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      camera.position.set(0, 0, 500);
+
+      window.addEventListener("resize", () => {
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+      });
+
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" || event.keyCode === 27) {
+          if (enableDrawLine) {
+            if (line_cursor) {
+              scene.remove(line_cursor);
             }
-            enableNavToPose = false;
-            enableSetPose = false;
-            enableDrawLine = true;
-            enablePathFollow = false;
-            break;
-          case "pathfollow":
-            if (line_cursor) scene.remove(line_cursor);
-            enableNavToPose = false;
-            enableSetPose = false;
             enableDrawLine = false;
-            enablePathFollow = true;
-            // Instead of running immediately, we just finish drawing
-            // Use "Save Path" or "Path Follower" logic?
-            // The user said "Path Follower" button executes drawn path. 
-            // BUT now they want to SAVE it.
-            // Let's keep existing "pathfollow" behavior as "Run Drawn Path Immediately"
-            // AND enable the key "Save Path" button.
-            const poses = createPoseArrayFromPoints(points);
-            pathfollowNav(poses);
-            // Enable Save button now that we have points
-            document.querySelector('[data-action="savepath"]').classList.remove('disabled');
-            break;
-          case "savepath":
-            savePath();
-            break;
-          case "runpath":
-            if (selectedPath) {
-              pathfollowNav(selectedPath.poses);
-            }
-            break;
-          case "clearpath":
-            clearPathVisualization();
-            break;
-          case "startminimal":
-            startMinimal();
-            break;
-          case "stopminimal":
-            stopMinimal();
-            break;
-          case "startslam":
-            startSlam();
-            break;
-          case "stopslam":
-            stopSlam();
-            break;
-          case "savemap":
-            saveMap();
-            break;
-          case "startnav":
-            startNav();
-            break;
-          case "stopnav":
-            stopNav();
-            break;
-          case "deletemap":
-            deleteMap();
-            break;
-          case "addwaypoint":
-            if (!selectedMap) {
-              alert("Please select a map first!");
-              return;
-            }
-            if (line_cursor) scene.remove(line_cursor);
-            enableNavToPose = false;
-            enableSetPose = false;
-            enableAddWaypoint = true;
-            enableDrawLine = false;
-            enablePathFollow = false;
-            M.toast({ html: 'Click and drag on map to set waypoint', classes: 'rounded' });
-            break;
-          case "gotowaypoint":
-            if (selectedWaypoint) {
-              const payload = { type: "action", name: "navtopose", data: selectedWaypoint };
-              ws.send(JSON.stringify(payload));
-              M.toast({ html: `Navigating to ${selectedWaypoint.name}...`, classes: 'blue' });
-            }
-            break;
-          case "none":
-            if (line_cursor) scene.remove(line_cursor);
-            enableNavToPose = false;
-            enableSetPose = false;
-            enableDrawLine = false;
-            enablePathFollow = false;
-            break;
+          }
         }
       });
-    });
 
-    // Initialize button states
-    updateButtonStates();
+      document.querySelectorAll(".menu-btn").forEach((button) => {
+        button.addEventListener("click", function () {
+          const action = this.getAttribute("data-action");
+          switch (action) {
+            case "navtopose":
+              if (line_cursor) scene.remove(line_cursor);
+              enableNavToPose = true;
+              enableSetPose = false;
+              enableDrawLine = false;
+              enablePathFollow = false;
+              break;
+            case "setpose":
+              if (line_cursor) scene.remove(line_cursor);
+              enableNavToPose = false;
+              enableSetPose = true;
+              enableDrawLine = false;
+              enablePathFollow = false;
+              break;
+            case "drawpath":
+              if (line_cursor) scene.remove(line_cursor);
+              if (line) {
+                scene.remove(line);
+                points.length = 0;
+              }
+              enableNavToPose = false;
+              enableSetPose = false;
+              enableDrawLine = true;
+              enablePathFollow = false;
+              break;
+            case "pathfollow":
+              if (line_cursor) scene.remove(line_cursor);
+              enableNavToPose = false;
+              enableSetPose = false;
+              enableDrawLine = false;
+              enablePathFollow = true;
+              // Instead of running immediately, we just finish drawing
+              // Use "Save Path" or "Path Follower" logic?
+              // The user said "Path Follower" button executes drawn path. 
+              // BUT now they want to SAVE it.
+              // Let's keep existing "pathfollow" behavior as "Run Drawn Path Immediately"
+              // AND enable the key "Save Path" button.
+              const poses = createPoseArrayFromPoints(points);
+              pathfollowNav(poses);
+              // Enable Save button now that we have points
+              document.querySelector('[data-action="savepath"]').classList.remove('disabled');
+              break;
+            case "savepath":
+              savePath();
+              break;
+            case "runpath":
+              if (selectedPath) {
+                pathfollowNav(selectedPath.poses);
+              }
+              break;
+            case "clearpath":
+              clearPathVisualization();
+              break;
+            case "startminimal":
+              startMinimal();
+              break;
+            case "stopminimal":
+              stopMinimal();
+              break;
+            case "startslam":
+              startSlam();
+              break;
+            case "stopslam":
+              stopSlam();
+              break;
+            case "savemap":
+              saveMap();
+              break;
+            case "startnav":
+              startNav();
+              break;
+            case "stopnav":
+              stopNav();
+              break;
+            case "deletemap":
+              deleteMap();
+              break;
+            case "addwaypoint":
+              if (!selectedMap) {
+                alert("Please select a map first!");
+                return;
+              }
+              if (line_cursor) scene.remove(line_cursor);
+              enableNavToPose = false;
+              enableSetPose = false;
+              enableAddWaypoint = true;
+              enableDrawLine = false;
+              enablePathFollow = false;
+              M.toast({ html: 'Click and drag on map to set waypoint', classes: 'rounded' });
+              break;
+            case "gotowaypoint":
+              if (selectedWaypoint) {
+                const payload = { type: "action", name: "navtopose", data: selectedWaypoint };
+                ws.send(JSON.stringify(payload));
+                M.toast({ html: `Navigating to ${selectedWaypoint.name}...`, classes: 'blue' });
+              }
+              break;
+            case "none":
+              if (line_cursor) scene.remove(line_cursor);
+              enableNavToPose = false;
+              enableSetPose = false;
+              enableDrawLine = false;
+              enablePathFollow = false;
+              break;
+          }
+        });
+      });
 
-    document.addEventListener("DOMContentLoaded", initThreeJS);
+      // Initialize button states
+      updateButtonStates();
+
+      document.addEventListener("DOMContentLoaded", initThreeJS);
   </script>
 </body>
 
