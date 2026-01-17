@@ -450,7 +450,8 @@
       function saveUIState() {
         const state = {
           selected_map: selectedMap,
-          selected_waypoint_name: selectedWaypoint ? selectedWaypoint.name : null
+          selected_waypoint_name: selectedWaypoint ? selectedWaypoint.name : null,
+          selected_path_name: currentServerState.selected_path_name // Ensure this uses the synced state var
         };
         // Save to LocalStorage as a fallback
         localStorage.setItem('ros2_ui_state', JSON.stringify(state));
@@ -821,17 +822,30 @@
             const span = li.querySelector('span');
             if (span && span.textContent === currentServerState.selected_path_name) {
               li.style.backgroundColor = "#e0e0e0";
-              selectedPath = pathList.find(p => p.name === currentServerState.selected_path_name);
-              if (selectedPath) {
+              const newSelectedPath = pathList.find(p => p.name === currentServerState.selected_path_name);
+
+              if (newSelectedPath) {
+                selectedPath = newSelectedPath; // VISUALIZATION: Ensure selectedPath matches
                 if (runBtn) runBtn.classList.remove('disabled');
+
+                // Only visualize if not already visualized or if it's a different path
+                // (We'll assume simple re-vis is okay, but avoid heavy loop)
+                // Actually, updatePathList is called on "path_list" message.
+                // If we are just selecting, we don't get a "path_list" message unless we save/delete.
+                // The "ui_state" message triggers a reload of last lists? No.
+                // "ui_state" just updates currentServerState. We need to re-run highlight logic then.
+
+                // Visualize ONLY if we haven't already for this specific path update interaction
+                // Ideally duplicate calls to visualizePath are cheap-ish (remove and add)
                 visualizePath(selectedPath);
                 found = true;
               }
             }
           });
           if (!found) {
-            // Reset if not found
+            // If server says we have a path selected, but it's not in the list (e.g. deleted), clear it.
             currentServerState.selected_path_name = null;
+            if (runBtn) runBtn.classList.add('disabled');
           }
         }
       }
