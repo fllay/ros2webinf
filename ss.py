@@ -450,6 +450,26 @@ class WebSocketROS2Bridge(Node):
         pose_array_msg.poses = pss
         return pose_array_msg
     
+    def convert_json_pose_array_to_poses(self, ps):
+        pss = []
+        for i in range(len(ps)):
+            pose_s = PoseStamped()
+            pose_s.header.stamp.sec = 0
+            pose_s.header.stamp.nanosec = 0
+            pose_s.header.frame_id = 'map'
+            
+            # Construct the Pose message from the transform
+            pose_s.pose.position.x = float(ps[i]['position']['x'])
+            pose_s.pose.position.y = float(ps[i]['position']['y'])
+            pose_s.pose.position.z = 0.0
+            
+            pose_s.pose.orientation.x = float(ps[i]['orientation']['x'])
+            pose_s.pose.orientation.y = float(ps[i]['orientation']['y'])
+            pose_s.pose.orientation.z = float(ps[i]['orientation']['z'])
+            pose_s.pose.orientation.w = float(ps[i]['orientation']['w'])
+            pss.append(pose_s)
+        return pss
+    
 
     
     def convert_json_pose_array_to_poses(self, ps):
@@ -577,9 +597,11 @@ class WebSocketROS2Bridge(Node):
                         #goal_msg1.goal_checker_id = ''  # Use default goal checker
                         # print(goal_msg1)
                         #self.send_goal_path(goal_msg1)
+                        
+                        # --- NavigateThroughPoses ---
                         poses_p = self.convert_json_pose_array_to_poses(json_dada['data'])
                         parray = self.convert_json_pose_array_to_pose_array(json_dada['data'])
-                        print(parray)
+                        print("Publishing pose array for viz")
                         self.pose_array_publisher.publish(parray)
                         
                         goal_poses = NavigateThroughPoses.Goal()
