@@ -9,11 +9,12 @@ This project provides a web-based interface for monitoring and controlling a ROS
 - **Robot State Tracking**: Visualizes the robot's current pose and laser scan data (Point Cloud).
 - **Navigation Status Display**: Real-time feedback showing distance to goal, current position, and navigation success/failure.
 
-### Navigation Controls
-- **Nav to Pose**: Send navigation goals by clicking and dragging on the map to set position and orientation.
-- **Set Pose**: Set the robot's initial pose estimate for localization (similar to RViz's "2D Pose Estimate").
-- **Path Drawing**: Interactively draw a path for the robot to follow.
-- **Path Following**: Execute the drawn path using ROS2 navigation actions.
+### Path Management System
+- **Interactive Path Drawing**: Left-click to add points, right-click and select "End" to finish.
+- **Path Persistence**: Save drawn paths with custom names; paths are stored in the map's JSON file.
+- **Path List**: View and select saved paths for execution.
+- **Advanced Visualization**: Paths are rendered as thin directional arrows with orientation indicators at the arrival point.
+- **Path Following**: Execute saved paths using the `NavigateThroughPoses` action.
 
 ### Map Management
 - **Save Map**: Save the current SLAM-generated map to disk.
@@ -36,12 +37,14 @@ This project provides a web-based interface for monitoring and controlling a ROS
 - **SLAM Nav**: Start and stop SLAM with async navigation.
 - **Nav Stack**: Start and stop the Nav2 navigation stack with a selected map.
 - **Button Interlocks**: Smart button states prevent conflicting operations.
+- **Stability**: Robust WebSocket communication with thread-safe data broadcasting from ROS2 callbacks to connected clients.
 
 ### Interactive UI
 - **Pan/Zoom**: Intuitive map controls with mouse and keyboard.
 - **Camera Rotation**: Rotate the view with dedicated buttons (+90°, -90°, Reset).
 - **Materialize CSS**: Clean, modern styling.
 - **Status Indicators**: Color-coded buttons and real-time status updates.
+- **Dynamic Layout**: Responsive panel layout that maximizes visualization space.
 
 ## Architecture
 
@@ -197,20 +200,16 @@ The server listens on **`ws://0.0.0.0:8888`**.
 
 | Type | Name | Data | Action |
 |:-----|:-----|:-----|:-------|
-| **`action`** | `navtopose` | `{ position: {...}, orientation: {...} }` | Send NavigateToPose goal |
-| **`action`** | `set_pose` | `{ position: {...}, orientation: {...} }` | Publish initial pose estimate to `/initialpose` |
-| **`action`** | `pathfollow` | `[ { position, orientation }, ... ]` | Send NavigateThroughPoses goal |
+| **`action`** | `navtopose` | `{ position, orientation }` | Send NavigateToPose goal |
+| **`action`** | `pathfollow` | `[ { position, orientation }, ... ]` | Send goal through poses |
 | **`process`** | `upstart` | - | Start minimal.py launch |
-| **`process`** | `stop_upstart` | - | Stop minimal.py process |
-| **`process`** | `start_slam` | - | Start slam_async_nav.py launch |
-| **`process`** | `stop_slam` | - | Stop SLAM process |
-| **`process`** | `save_map` | `"map_name"` | Save current map with given name |
+| **`process`** | `save_path` | `{ map_name, path: {name, poses} }` | Save path to map's JSON |
+| **`process`** | `delete_path` | `{ map_name, path_name }` | Remove path from JSON |
+| **`process`** | `save_map` | `"map_name"` | Save SLAM map |
 | **`process`** | `start_nav` | `"map_name"` | Start Nav2 with selected map |
-| **`process`** | `stop_nav` | - | Stop Nav2 stack |
-| **`process`** | `delete_map` | `"map_name"` | Delete map files (.yaml, .pgm, and .json) |
-| **`process`** | `save_waypoint` | `{ map_name, waypoint }` | Save a new waypoint to map's JSON array |
-| **`process`** | `load_waypoints` | `"map_name"` | Request waypoint list for a map |
-| **`process`** | `delete_waypoint` | `{ map_name, waypoint_name }` | Remove a specific waypoint from map's JSON |
+| **`ui_state`** | `{ ... }` | - | Synchronize UI selections |
+| **`process`** | `save_waypoint` | `{ map_name, waypoint }` | Save a new waypoint |
+| **`process`** | `delete_waypoint` | `{ map_name, waypoint_name }` | Remove a waypoint |
 
 #### Outgoing Messages (Server → Client)
 
