@@ -871,9 +871,89 @@
         });
 
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const material = new THREE.LineBasicMaterial({ color: 0xFF00FF, linewidth: 3 });
-        pathVisualization = new THREE.Line(geometry, material);
+        // Use thick arrows instead of Line
+        // const material = new THREE.LineBasicMaterial({ color: 0xFF00FF, linewidth: 3 });
+        // pathVisualization = new THREE.Line(geometry, material);
+
+        pathVisualization = new THREE.Group();
         pathVisualization.renderOrder = 20;
+
+        // Helper to create valid thick arrow
+        function createThickArrow(start, end, color, width = 1.5, headWidth = 4, headLen = 10) {
+          const direction = new THREE.Vector3().subVectors(end, start);
+          const length = direction.length();
+
+          if (length < 0.1) return null; // Too short
+
+          // Cap head length to not exceed segment
+          const actualHeadLen = Math.min(headLen, length * 0.4);
+          const shaftLen = length - actualHeadLen;
+
+          const arrowGroup = new THREE.Group();
+          arrowGroup.position.copy(start);
+          arrowGroup.lookAt(end);
+
+          // Shaft (Cylinder)
+          // Cylinder alignment is Y-up. But we want Z-forward for lookAt? 
+          // Actually lookAt aligns +Z to target.
+          // If we build along Z:
+
+          const shaftGeo = new THREE.CylinderGeometry(width, width, shaftLen, 8);
+          shaftGeo.rotateX(Math.PI / 2); // Align to Z
+          shaftGeo.translate(0, 0, shaftLen / 2); // Move origin to start
+          const shaftMat = new THREE.MeshBasicMaterial({ color: color });
+          const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+          arrowGroup.add(shaft);
+
+          // Head (Cone)
+          const headGeo = new THREE.ConeGeometry(headWidth, actualHeadLen, 8);
+          headGeo.rotateX(Math.PI / 2);
+          headGeo.translate(0, 0, shaftLen + actualHeadLen / 2);
+          const headMat = new THREE.MeshBasicMaterial({ color: color });
+          const head = new THREE.Mesh(headGeo, headMat);
+          arrowGroup.add(head);
+
+          return arrowGroup;
+        }
+
+        // 1. Draw Segments
+        for (let i = 0; i < points.length - 1; i++) {
+          const p1 = points[i];
+          const p2 = points[i + 1];
+          const arrow = createThickArrow(p1, p2, 0xFF00FF, 1.5, 4, 10); // Magenta
+          if (arrow) pathVisualization.add(arrow);
+        }
+
+        // 2. Draw Last Point Orientation Arrow
+        if (pathData.poses.length > 0) {
+          const lastPose = pathData.poses[pathData.poses.length - 1];
+          const lastPt = points[points.length - 1];
+
+          // Convert orientation to vector (assuming 2D plane)
+          // Orientation is quaternion {x,y,z,w}
+          const q = new THREE.Quaternion(
+            lastPose.orientation.x,
+            lastPose.orientation.y,
+            lastPose.orientation.z,
+            lastPose.orientation.w
+          );
+
+          const v = new THREE.Vector3(1, 0, 0); // Default forward X
+          v.applyQuaternion(q);
+          v.normalize();
+
+          // Scale vector for display length (e.g. 20 pixels/units)
+          const arrowLen = 25;
+          const endPt = new THREE.Vector3(
+            lastPt.x + v.x * arrowLen,
+            lastPt.y + v.y * arrowLen,
+            0
+          );
+
+          const lastArrow = createThickArrow(lastPt, endPt, 0xFF00FF, 2, 5, 12); // Slightly thicker
+          if (lastArrow) pathVisualization.add(lastArrow);
+        }
+
         scene.add(pathVisualization);
       }
 
