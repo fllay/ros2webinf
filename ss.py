@@ -309,7 +309,10 @@ class WebSocketROS2Bridge(Node):
                 dictionary_tc['data']['data'] = base64_string
                 #print(dictionary_tc['data']['data']) 
     
-                asyncio.run(self.send_data_to_clients(json.dumps(dictionary_tc)))
+                #print(dictionary_tc['data']['data']) 
+    
+                # asyncio.run(self.send_data_to_clients(json.dumps(dictionary_tc)))
+                self.broadcast_message(json.dumps(dictionary_tc))
 
             
                         # Create a PoseStamped message to publish
@@ -330,7 +333,8 @@ class WebSocketROS2Bridge(Node):
             #self.pose_publisher.publish(pose_in_map)
             pose_in_map_json = self.ros2_msg_to_json('robot_pose_in_map',pose_in_map)
             self.last_pose_json = pose_in_map_json
-            asyncio.run(self.send_data_to_clients(pose_in_map_json))
+            # asyncio.run(self.send_data_to_clients(pose_in_map_json))
+            self.broadcast_message(pose_in_map_json)
        
         except (LookupException, ConnectivityException, ExtrapolationException) as e:
             self.get_logger().warn(f"Could not transform pointcloud: {e}")
