@@ -920,7 +920,7 @@
         for (let i = 0; i < points.length - 1; i++) {
           const p1 = points[i];
           const p2 = points[i + 1];
-          const arrow = createThickArrow(p1, p2, 0xFF00FF, 1.5, 4, 10); // Magenta
+          const arrow = createThickArrow(p1, p2, 0xFF00FF, 0.6, 1.8, 6); // Thinner: 0.6 shaft, 1.8 head
           if (arrow) pathVisualization.add(arrow);
         }
 
@@ -943,14 +943,14 @@
           v.normalize();
 
           // Scale vector for display length (e.g. 20 pixels/units)
-          const arrowLen = 25;
+          const arrowLen = 15;
           const endPt = new THREE.Vector3(
             lastPt.x + v.x * arrowLen,
             lastPt.y + v.y * arrowLen,
             0
           );
 
-          const lastArrow = createThickArrow(lastPt, endPt, 0xFF00FF, 2, 5, 12); // Slightly thicker
+          const lastArrow = createThickArrow(lastPt, endPt, 0xFF00FF, 1.0, 3.0, 8); // Slightly thinner
           if (lastArrow) pathVisualization.add(lastArrow);
         }
 
