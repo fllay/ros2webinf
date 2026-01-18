@@ -1170,15 +1170,13 @@
         console.log("WebSocket connection closed");
       };
 
-      function computeOuaternionFrom2Points(pStart, pEnd) {
-        const direction = new THREE.Vector3().subVectors(pStart, pEnd).normalize();
-        const quaternion = new THREE.Quaternion();
-        const direction_q = quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
-        const rotationQuaternionz = new THREE.Quaternion();
-        rotationQuaternionz.setFromEuler(new THREE.Euler(0, 0, -Math.PI / 2));
-        const resultQuaternion = new THREE.Quaternion();
-        resultQuaternion.multiplyQuaternions(rotationQuaternionz, direction_q);
-        return resultQuaternion;
+      function computeQuaternionFrom2Points(pStart, pEnd) {
+        const dx = pEnd.x - pStart.x;
+        const dy = pEnd.y - pStart.y;
+        const yaw = Math.atan2(dy, dx);
+        const q = new THREE.Quaternion();
+        q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), yaw);
+        return q;
       }
 
       function getPoseFromArrow(arrow) {
@@ -1190,31 +1188,25 @@
       }
 
       function createPoseArrayFromPoints(in_points) {
+        if (!in_points || in_points.length === 0) return [];
         var poses = [];
-        for (const [idx, point] of in_points.entries()) {
-          if (idx < in_points.length - 2) {
-            const qq = computeOuaternionFrom2Points(point, in_points[idx + 1]);
-            const pose = {
-              position: { x: point.x * mapres, y: point.y * mapres, z: point.z * mapres },
-              orientation: { x: qq.x, y: qq.y, z: qq.z, w: qq.w }
-            };
-            poses.push(pose);
+        for (let i = 0; i < in_points.length; i++) {
+          const point = in_points[i];
+          let q = new THREE.Quaternion();
+
+          if (i < in_points.length - 1) {
+            // Orientation towards next point
+            q = computeQuaternionFrom2Points(in_points[i], in_points[i + 1]);
+          } else if (i > 0) {
+            // Last point: Same as previous segment
+            q = computeQuaternionFrom2Points(in_points[i - 1], in_points[i]);
           }
+
+          poses.push({
+            position: { x: point.x * mapres, y: point.y * mapres, z: point.z * mapres || 0 },
+            orientation: { x: q.x, y: q.y, z: q.z, w: q.w }
+          });
         }
-        const pose = {
-          position: {
-            x: in_points[in_points.length - 1].x * mapres,
-            y: in_points[in_points.length - 1].y * mapres,
-            z: in_points[in_points.length - 1].z * mapres
-          },
-          orientation: {
-            x: poses[in_points.length - 3].orientation.x,
-            y: poses[in_points.length - 3].orientation.y,
-            z: poses[in_points.length - 3].orientation.z,
-            w: poses[in_points.length - 3].orientation.w
-          }
-        };
-        poses.push(pose);
         return poses;
       }
 
@@ -1413,21 +1405,7 @@
           const pathName = prompt("Enter a name for this path:", "Path_1");
           if (!pathName) return;
 
-          const poses = [];
-          for (let i = 0; i < points.length; i++) {
-            let x = points[i].x * mapres;
-            let y = points[i].y * mapres;
-            let z = points[i].z;
-            let q = new THREE.Quaternion(); // Default identity orientation for points
-
-            // For orientation, we could point to the next point?
-            // createPoseArrayFromPoints creates simple objects, backend converts to PoseStamped
-            // Let's save the raw position/orientation data
-            poses.push({
-              position: { x: x, y: y, z: z },
-              orientation: { x: 0, y: 0, z: 0, w: 1 }
-            });
-          }
+          const poses = createPoseArrayFromPoints(points);
 
           const payload = {
             type: "process",
@@ -1596,7 +1574,7 @@
                 scene.remove(arrowGroup);
               }
               arrowGroup = createThickerArrow(startPoint, endPoint);
-              const resultQuaternion = computeOuaternionFrom2Points(startPoint, endPoint);
+              const resultQuaternion = computeQuaternionFrom2Points(startPoint, endPoint);
               arrowPose = {
                 position: { x: startPoint.x * mapres, y: startPoint.y * mapres, z: startPoint.z * mapres },
                 orientation: { x: resultQuaternion.x, y: resultQuaternion.y, z: resultQuaternion.z, w: resultQuaternion.w }
