@@ -247,6 +247,64 @@ The server listens on **`ws://0.0.0.0:8888`**.
 -   Uses `subprocess` to manage ROS2 launch files
 -   Sends `SIGINT` for graceful shutdown
 
+### JavaScript Usage Example
+
+To interact with the ROS2 Web Interface from your own JavaScript application, follow these steps:
+
+#### 1. Establish Connection
+Connect to the WebSocket server running on the robot (default port `8888`).
+
+```javascript
+const robotIP = '192.168.1.10'; // Replace with your robot's IP
+const ws = new WebSocket(`ws://${robotIP}:8888`);
+
+ws.onopen = () => {
+  console.log('Connected to ROS2 Bridge');
+};
+
+ws.onerror = (error) => {
+  console.error('WebSocket Error:', error);
+};
+```
+
+#### 2. Listen for Data
+The bridge broadcasts robot state and sensor data as JSON objects.
+
+```javascript
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  
+  switch(message.type) {
+    case 'robot_pose_in_map':
+      console.log('Robot Pose:', message.data.pose.position);
+      break;
+    case 'nav_feedback':
+      console.log('Distance remaining:', message.data.distance_remaining);
+      break;
+    case 'map_list':
+      console.log('Available Maps:', message.data);
+      break;
+  }
+};
+```
+
+#### 3. Send Commands
+Send actions or process control commands by stringifying a JSON payload.
+
+```javascript
+// Example: Sending a Navigation Goal
+const goal = {
+  type: "action",
+  name: "navtopose",
+  data: {
+    position: { x: 1.5, y: -2.0, z: 0.0 },
+    orientation: { x: 0, y: 0, z: 0.707, w: 0.707 }
+  }
+};
+
+ws.send(JSON.stringify(goal));
+```
+
 ## Map File Format
 
 Saved maps consist of two files:
