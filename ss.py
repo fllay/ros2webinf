@@ -573,6 +573,39 @@ class WebSocketROS2Bridge(Node):
                             print(f"Error in pathfollow: {e}")
                             import traceback
                             traceback.print_exc()
+
+                    if(json_dada['name'] == "gotowaypoint_by_name"):
+                        data = json_dada.get('data', {})
+                        map_name = data.get('map_name')
+                        wp_name = data.get('waypoint_name')
+                        
+                        if not map_name or not wp_name:
+                            self.broadcast_message(json.dumps({
+                                "type": "nav_result",
+                                "success": False,
+                                "error": "Missing map_name or waypoint_name"
+                            }))
+                        else:
+                            map_base = os.path.splitext(map_name)[0]
+                            map_data = self.load_map_data(map_base)
+                            waypoints = map_data.get("waypoints", [])
+                            
+                            target_wp = next((wp for wp in waypoints if wp.get('name') == wp_name), None)
+                            
+                            if target_wp:
+                                pp = self.convert_json_pose_to_poasestamp(target_wp)
+                                self.send_goal_pose(pp)
+                                self.broadcast_message(json.dumps({
+                                    "type": "nav_status",
+                                    "text": f"Navigating to waypoint: {wp_name}",
+                                    "color": "blue"
+                                }))
+                            else:
+                                self.broadcast_message(json.dumps({
+                                    "type": "nav_result",
+                                    "success": False,
+                                    "error": f"Waypoint '{wp_name}' not found in map '{map_name}'"
+                                }))
                 
                     
                 elif(json_dada['type'] == "topic"):

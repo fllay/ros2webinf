@@ -202,6 +202,7 @@ The server listens on **`ws://0.0.0.0:8888`**.
 |:-----|:-----|:-----|:-------|
 | **`action`** | `navtopose` | `{ position, orientation }` | Send NavigateToPose goal |
 | **`action`** | `pathfollow` | `[ { position, orientation }, ... ]` | Send goal through poses |
+| **`action`** | `gotowaypoint_by_name` | `{ map_name, waypoint_name }` | Trigger navigation to a saved waypoint |
 | **`process`** | `upstart` | - | Start minimal.py launch |
 | **`process`** | `save_path` | `{ map_name, path: {name, poses} }` | Save path to map's JSON |
 | **`process`** | `delete_path` | `{ map_name, path_name }` | Remove path from JSON |
