@@ -1,0 +1,40 @@
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# Node.js dependencies and build artifacts
+/node_modules
+/dist
+/build
+/out
+/target
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json # Only if you use npm v7+ and don't want to commit it
+/coverage
+
+# Python environments
+/venv
+/env
+/ENV
+.python-version
+__pycache__
+*.pyc
+
+# Operating System and IDE files (macOS, Windows, VS Code/Antigravity)
+.DS_Store
+.vscode/              # Ignore IDE settings that shouldn't be shared with the team
+.idea/                # Common for Jetbrains IDEs
+ehthumbs.db
+Thumbs.db
+
+# Antigravity specific
+.antigravity/         # Local config files for Antigravity itself
+.geminiignore         # Used for agent context retrieval, but might not be part of git repo
+
+# Misc temporary files
+*.tmp
+*.temp
+*.log
