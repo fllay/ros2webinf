@@ -56,11 +56,9 @@
           <div class="inner-col-right">
             <h6>Additional</h6>
             <p>Content here.</p>
-            <a href="#!" class="btn menu-btn btn-small btn-green" data-action="startminimal">Upstart</a>
-            <a href="#!" class="btn menu-btn btn-small btn-red" data-action="stopminimal">Stop</a>
+            <a href="#!" class="btn menu-btn btn-small btn-green toggle-btn" data-action="toggleminimal" id="btn-toggleminimal">Upstart</a>
             <div style="margin-top: 10px;"></div>
-            <a href="#!" class="btn menu-btn btn-small btn-purple" data-action="startslam">SLAM Nav</a>
-            <a href="#!" class="btn menu-btn btn-small btn-red" data-action="stopslam">Stop SLAM</a>
+            <a href="#!" class="btn menu-btn btn-small btn-purple toggle-btn" data-action="toggleslam" id="btn-toggleslam">SLAM Nav</a>
             <div style="margin-top: 10px;"></div>
             <a href="#!" class="btn menu-btn btn-small btn-orange" data-action="savemap">Save Map</a>
 
@@ -116,8 +114,7 @@
             </div>
 
             <div style="margin-top: 10px;"></div>
-            <a href="#!" class="btn menu-btn btn-small btn-teal" data-action="startnav">Start Nav</a>
-            <a href="#!" class="btn menu-btn btn-small btn-pink" data-action="stopnav">Stop Nav</a>
+            <a href="#!" class="btn menu-btn btn-small btn-teal toggle-btn" data-action="togglenav" id="btn-togglenav">Start Nav</a>
 
             <div id="nav-status-container"
               style="margin-top: 10px; padding: 8px; background: #f5f5f5; border-radius: 4px; border-left: 3px solid #00897b;">
@@ -270,6 +267,11 @@
 
     .btn-pink {
       background-color: #d81b60 !important;
+    }
+
+    .toggle-btn.active {
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5), 0 0 0 5px currentColor;
+      font-weight: bold;
     }
 
     /* Loading Overlay */
@@ -472,40 +474,35 @@
       }
 
       function updateButtonStates() {
-        const btnStartMinimal = document.querySelector('[data-action="startminimal"]');
-        const btnStopMinimal = document.querySelector('[data-action="stopminimal"]');
-
-        const btnStartSlam = document.querySelector('[data-action="startslam"]');
-        const btnStopSlam = document.querySelector('[data-action="stopslam"]');
-
-        const btnStartNav = document.querySelector('[data-action="startnav"]');
-        const btnStopNav = document.querySelector('[data-action="stopnav"]');
+        const btnToggleMinimal = document.getElementById('btn-toggleminimal');
+        const btnToggleSlam = document.getElementById('btn-toggleslam');
+        const btnToggleNav = document.getElementById('btn-togglenav');
 
         // Minimal
         if (isMinimalRunning) {
-          btnStartMinimal.classList.add('disabled');
-          btnStopMinimal.classList.remove('disabled');
+          btnToggleMinimal.classList.add('active');
+          btnToggleMinimal.textContent = 'Stop';
         } else {
-          btnStartMinimal.classList.remove('disabled');
-          btnStopMinimal.classList.add('disabled');
+          btnToggleMinimal.classList.remove('active');
+          btnToggleMinimal.textContent = 'Upstart';
         }
 
         // SLAM
         if (isSlamRunning) {
-          btnStartSlam.classList.add('disabled');
-          btnStopSlam.classList.remove('disabled');
+          btnToggleSlam.classList.add('active');
+          btnToggleSlam.textContent = 'Stop SLAM';
         } else {
-          btnStartSlam.classList.remove('disabled');
-          btnStopSlam.classList.add('disabled');
+          btnToggleSlam.classList.remove('active');
+          btnToggleSlam.textContent = 'SLAM Nav';
         }
 
         // Nav
         if (isNavRunning) {
-          btnStartNav.classList.add('disabled');
-          btnStopNav.classList.remove('disabled');
+          btnToggleNav.classList.add('active');
+          btnToggleNav.textContent = 'Stop Nav';
         } else {
-          btnStartNav.classList.remove('disabled');
-          btnStopNav.classList.add('disabled');
+          btnToggleNav.classList.remove('active');
+          btnToggleNav.textContent = 'Start Nav';
         }
       }
 
@@ -1278,12 +1275,8 @@
           ws.send(JSON.stringify(payload));
           M.toast({ html: 'Start command sent!', classes: 'green' });
 
-          // Update state after 5 seconds
           isMinimalRunning = true;
           updateButtonStates();
-          setTimeout(() => {
-            // Keep as running (don't auto-revert)
-          }, 5000);
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -1296,14 +1289,19 @@
           ws.send(JSON.stringify(payload));
           M.toast({ html: 'Stop command sent!', classes: 'orange' });
 
-          // Update state after 5 seconds
-          setTimeout(() => {
-            isMinimalRunning = false;
-            updateButtonStates();
-          }, 5000);
+          isMinimalRunning = false;
+          updateButtonStates();
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
+        }
+      }
+
+      function toggleMinimal() {
+        if (isMinimalRunning) {
+          stopMinimal();
+        } else {
+          startMinimal();
         }
       }
 
@@ -1313,7 +1311,6 @@
           ws.send(JSON.stringify(payload));
           M.toast({ html: 'SLAM Start command sent!', classes: 'green' });
 
-          // Update state immediately
           isSlamRunning = true;
           updateButtonStates();
         } else {
@@ -1328,14 +1325,19 @@
           ws.send(JSON.stringify(payload));
           M.toast({ html: 'SLAM Stop command sent!', classes: 'orange' });
 
-          // Update state after 5 seconds
-          setTimeout(() => {
-            isSlamRunning = false;
-            updateButtonStates();
-          }, 5000);
+          isSlamRunning = false;
+          updateButtonStates();
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
+        }
+      }
+
+      function toggleSlam() {
+        if (isSlamRunning) {
+          stopSlam();
+        } else {
+          startSlam();
         }
       }
 
@@ -1363,7 +1365,6 @@
           ws.send(JSON.stringify(payload));
           M.toast({ html: `Starting navigation with map: ${selectedMap}`, classes: 'green' });
 
-          // Update state immediately
           isNavRunning = true;
           updateButtonStates();
         } else {
@@ -1378,14 +1379,19 @@
           ws.send(JSON.stringify(payload));
           M.toast({ html: 'Stopping navigation...', classes: 'orange' });
 
-          // Update state after 5 seconds
-          setTimeout(() => {
-            isNavRunning = false;
-            updateButtonStates();
-          }, 5000);
+          isNavRunning = false;
+          updateButtonStates();
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
+        }
+      }
+
+      function toggleNav() {
+        if (isNavRunning) {
+          stopNav();
+        } else {
+          startNav();
         }
       }
 
@@ -1801,26 +1807,17 @@
             case "clearpath":
               clearPathVisualization();
               break;
-            case "startminimal":
-              startMinimal();
+            case "toggleminimal":
+              toggleMinimal();
               break;
-            case "stopminimal":
-              stopMinimal();
-              break;
-            case "startslam":
-              startSlam();
-              break;
-            case "stopslam":
-              stopSlam();
+            case "toggleslam":
+              toggleSlam();
               break;
             case "savemap":
               saveMap();
               break;
-            case "startnav":
-              startNav();
-              break;
-            case "stopnav":
-              stopNav();
+            case "togglenav":
+              toggleNav();
               break;
             case "deletemap":
               deleteMap();
