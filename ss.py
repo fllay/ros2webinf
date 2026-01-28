@@ -39,7 +39,11 @@ from tf2_ros.transform_listener import TransformListener
 from sensor_msgs.msg import PointCloud2, PointField
 
 def quaternion_to_matrix(quaternion):
-    """Convert a quaternion into a 4x4 transformation matrix."""
+    """
+    Convert a quaternion (x, y, z, w) into a 4x4 transformation matrix.
+    
+    This is used to apply rotations to point cloud data or other coordinate transforms.
+    """
     x, y, z, w = quaternion
     tx = 2.0 * x
     ty = 2.0 * y
@@ -56,13 +60,17 @@ def quaternion_to_matrix(quaternion):
 
     return np.array([
         [1.0 - (tyy + tzz), txy - twz, txz + twy, 0.0],
-        [txy + twz, 1.0 - (txx + tzz), tyz - twx, 0.0],
-        [txz - twy, tyz + twx, 1.0 - (txx + tyy), 0.0],
+        [txy - twz, 1.0 - (txx + tzz), tyz - twx, 0.0],
+        [txz + twy, tyz - twx, 1.0 - (txx + tyy), 0.0],
         [0.0, 0.0, 0.0, 1.0],
     ])
 
 def pointcloud2_to_xyz_array(cloud_msg):
-    """Convert a sensor_msgs/PointCloud2 message to a numpy array."""
+    """
+    Convert a sensor_msgs/PointCloud2 message to a numpy array of [N, 3].
+    
+    Extracts x, y, and z fields from the binary data of the PointCloud2 message.
+    """
     fmt = "fff"  # Assume XYZ-only PointCloud2
     dtype = np.dtype([("x", np.float32), ("y", np.float32), ("z", np.float32)])
     dtype = dtype.newbyteorder('>' if cloud_msg.is_bigendian else '<')
@@ -70,7 +78,11 @@ def pointcloud2_to_xyz_array(cloud_msg):
     return np.vstack([xyz_array["x"], xyz_array["y"], xyz_array["z"]]).T
 
 def xyz_array_to_pointcloud2(xyz_array, frame_id, stamp):
-    """Convert a numpy array to a sensor_msgs/PointCloud2 message."""
+    """
+    Convert a numpy array of [N, 3] to a sensor_msgs/PointCloud2 message.
+    
+    Packages raw XYZ points back into the binary format required by ROS2 PointCloud2 messages.
+    """
     fields = [
         PointField(name="x", offset=0, datatype=PointField.FLOAT32, count=1),
         PointField(name="y", offset=4, datatype=PointField.FLOAT32, count=1),
@@ -93,7 +105,12 @@ def xyz_array_to_pointcloud2(xyz_array, frame_id, stamp):
     )
 
 def transform_pointcloud(cloud_msg, transform_stamped):
-    """Transform a PointCloud2 message using a given TransformStamped."""
+    """
+    Transform a PointCloud2 message from its current frame to another frame.
+    
+    Calculates the 4x4 transformation matrix from the TransformStamped message
+    and applies it to all points in the cloud.
+    """
     # Convert transform to a 4x4 matrix
     trans = transform_stamped.transform.translation
     rot = transform_stamped.transform.rotation
@@ -103,29 +120,31 @@ def transform_pointcloud(cloud_msg, transform_stamped):
     # Convert point cloud to XYZ numpy array
     xyz_array = pointcloud2_to_xyz_array(cloud_msg)
 
-    # Apply transformation
+    # Apply transformation: P' = R * P + T
     transformed_xyz = np.dot(xyz_array, transform_matrix[:3, :3].T) + transform_matrix[:3, 3]
 
-    # Convert back to PointCloud2
+    # Convert back to PointCloud2 message
     return xyz_array_to_pointcloud2(transformed_xyz, transform_stamped.header.frame_id, cloud_msg.header.stamp)
 
 
 
 class WebSocketROS2Bridge(Node):
+    """
+    ROS2 Node that bridges ROS2 topics, services, and actions with multiple WebSocket clients.
+    It allows a web browser to interact with the robot's navigation, vision, and system controls.
+    """
     def __init__(self, clients):
         super().__init__('websocket_ros2_bridge')
-        self.clients1 = clients
+        self.clients1 = clients  # Set of connected WebSocket clients
         self.websocket_uri = "ws://0.0.0.0:8888"
         self.map_save_path = "/home/pi/amr_configs/maps"
-        #self.websocket_server = None
-        # Start the WebSocket server in a separate thread
+        
+        # Start the WebSocket server in a separate thread so it doesn't block ROS2 spinning
         self.websocket_thread = threading.Thread(target=self.start_websocket_server)
         self.websocket_thread.daemon = True
         self.websocket_thread.start()
         
-
-       
-
+        # Subscribe to map updates
         self.subscription_map = self.create_subscription(
             OccupancyGrid,
             'map',
@@ -133,9 +152,11 @@ class WebSocketROS2Bridge(Node):
             10)
         self.subscription_map  # Prevent unused variable warning
 
+        # TF2 Setup for coordinate transformations (e.g., Laser to Map)
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
+        # Subscribe to laser scan data
         self.subscription_scan = self.create_subscription(
             LaserScan,
             '/scan',
@@ -144,26 +165,29 @@ class WebSocketROS2Bridge(Node):
         
         self.subscription_scan
 
+        # Action clients for navigation
         self.navpose_action_client = ActionClient(self, NavigateToPose, '/navigate_to_pose')
         self.pathfollow_action_client = ActionClient(self, FollowPath, '/follow_path')
         self.nav_through_poses_action_client = ActionClient(self, NavigateThroughPoses, 'navigate_through_poses')
 
+        # Publishers for UI interactions
         self.pose_array_publisher = self.create_publisher(PoseArray, 'pose_array', 10)
         self.smooth_path_publisher = self.create_publisher(Path, 'smoothed_path', 10)
         self.initial_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
 
+        # Dictionaries to track running launch files and their processes
         self.launch_services = {}
         self.launch_threads = {}
         self.launch_tasks = {}
 
-        # Global UI State
+        # Global UI State to keep clients synchronized
         self.current_ui_state = {
             "selected_map": None,
             "selected_waypoint_name": None,
             "selected_path_name": None
         }
 
-        # Message Caching for new clients
+        # Cache for the most recent map and pose to send immediately to new clients
         self.last_map_json = None
         self.last_pose_json = None
 
@@ -174,6 +198,7 @@ class WebSocketROS2Bridge(Node):
         #self.pose_publisher = self.create_publisher(PoseStamped, '/robot_pose_in_map', 10)
     
     def send_goal_pose(self, pose: PoseStamped):
+        """Send a navigation goal to the NavigateToPose action server."""
         goal_msg = NavigateToPose.Goal()
         goal_msg.pose = pose
 
@@ -227,12 +252,12 @@ class WebSocketROS2Bridge(Node):
         self._send_goal_path_future.add_done_callback(self.goal_response_callback)
 
     def goal_response_callback(self, future: Future):
+        """Handle the response from the navigation action server (Accepted/Rejected)."""
         goal_handle = future.result()
 
         if not goal_handle.accepted:
             self.get_logger().info('Goal rejected.')
-            # Broadcast rejection
-            # Broadcast rejection
+            # Broadcast rejection to WebSocket clients
             self.broadcast_message(json.dumps({
                 "type": "nav_result",
                 "success": False,
@@ -245,12 +270,12 @@ class WebSocketROS2Bridge(Node):
         self._get_result_future.add_done_callback(self.get_result_callback)
 
     def get_result_callback(self, future: Future):
+        """Handle the final result of the navigation action (Succeeded/Failed)."""
         result = future.result().result
         status = future.result().status
         
         # Broadcast result to WebSocket clients
-        # Broadcast result to WebSocket clients
-        if status == 4:  # SUCCEEDED
+        if status == 4:  # 4 corresponds to SUCCEEDED in action_msgs.msg.GoalStatus
             self.get_logger().info('Navigation succeeded!')
             self.broadcast_message(json.dumps({
                 "type": "nav_result",
@@ -273,53 +298,48 @@ class WebSocketROS2Bridge(Node):
         self.broadcast_message(map_data_json)
 
     def scan_callback(self, scan_msg):
-        # Convert LaserScan to PointCloud2
+        """
+        Handle incoming LaserScan data, transform it into the 'map' frame using TF2,
+        and broadcast it as a Base64-encoded PointCloud2 to WebSocket clients.
+        """
+        # Convert LaserScan to PointCloud2 message
         cloud_msg = self.laserscan_to_pointcloud2(scan_msg)
         current_time = rclpy.time.Time()
 
-        # Convert rclpy.time.Time to builtin_interfaces.msg.Time
+        # Update timestamp to the current clock
         time_msg = BuiltinTime(sec=current_time.seconds_nanoseconds()[0], nanosec=current_time.seconds_nanoseconds()[1])
+        cloud_msg.header.stamp = time_msg 
 
-        cloud_msg.header.stamp = time_msg #scan_msg.header.stamp  # Ensure correct timestamp
         try:
+            # Lookup transform from laser frame to map frame at the scan's timestamp
             transform = self.tf_buffer.lookup_transform(
                 "map",  # target frame
                 cloud_msg.header.frame_id,  # source frame (laser frame)
-                rclpy.time.Time.from_msg(scan_msg.header.stamp),  # time at which the transform is needed
+                rclpy.time.Time.from_msg(scan_msg.header.stamp),  # time needed
             )
-            # Robot pose in map frame
+            # Lookup robot pose in map frame (for robot icon/position tracking)
             transform_p = self.tf_buffer.lookup_transform('map', 'base_link', rclpy.time.Time())        
-            # Laser scan in map frame as pointcloud2
-            #transformed_cloud = tf2_sensor_msgs.tf2_sensor_msgs.do_transform_cloud(cloud_msg, transform)
+            
+            # Apply transformation to the laser points
             transformed_cloud = transform_pointcloud(cloud_msg, transform)
 
             if transformed_cloud:
-                # Publish Transformed PointCloud2
-                #self.publisher.publish(transformed_cloud)
-        
-                string = ''.join(chr(i) for i in transformed_cloud.data)
-                # Convert each integer to its byte representation and concatenate
+                # Encode binary point cloud data to Base64 for JSON transmission
                 byte_array = bytes(transformed_cloud.data)
-
-                # Encode the byte array to Base64
                 base64_string = base64.b64encode(byte_array).decode('utf-8')
       
+                # Convert message to JSON and replace raw binary data with Base64 string
                 transformed_cloud_json = self.ros2_msg_to_json('scan_pointcloud',transformed_cloud)
                 dictionary_tc = json.loads(transformed_cloud_json)
                 dictionary_tc['data']['data'] = base64_string
-                #print(dictionary_tc['data']['data']) 
     
-                #print(dictionary_tc['data']['data']) 
-    
-                # asyncio.run(self.send_data_to_clients(json.dumps(dictionary_tc)))
+                # Broadcast laser scan (as point cloud) to all clients
                 self.broadcast_message(json.dumps(dictionary_tc))
 
-            
-                        # Create a PoseStamped message to publish
+            # Construct robot pose message from TF lookup
             pose_in_map = PoseStamped()
             pose_in_map.header.stamp = self.get_clock().now().to_msg()
             pose_in_map.header.frame_id = 'map'
-            # Construct the Pose message from the transform
             pose_in_map.pose.position.x = transform_p.transform.translation.x
             pose_in_map.pose.position.y = transform_p.transform.translation.y
             pose_in_map.pose.position.z = transform_p.transform.translation.z
@@ -329,11 +349,9 @@ class WebSocketROS2Bridge(Node):
             pose_in_map.pose.orientation.z = transform_p.transform.rotation.z
             pose_in_map.pose.orientation.w = transform_p.transform.rotation.w
   
-            # Publish the pose
-            #self.pose_publisher.publish(pose_in_map)
+            # Cache and broadcast robot pose
             pose_in_map_json = self.ros2_msg_to_json('robot_pose_in_map',pose_in_map)
             self.last_pose_json = pose_in_map_json
-            # asyncio.run(self.send_data_to_clients(pose_in_map_json))
             self.broadcast_message(pose_in_map_json)
        
         except (LookupException, ConnectivityException, ExtrapolationException) as e:
@@ -502,13 +520,17 @@ class WebSocketROS2Bridge(Node):
         
   
     async def websocket_handler(self, websocket, path):
+        """
+        Main handler for each WebSocket connection. 
+        Synchronizes state upon connection and routes incoming requests to ROS2 actions/services.
+        """
         self.clients1.add(websocket)
         
         # Send current map list to the new client
         maps = self.get_saved_maps()
         await websocket.send(json.dumps({"type": "map_list", "data": maps}))
 
-        # Send current process statuses
+        # Send current process statuses (which launch files are running)
         for launch_name in self.launch_services:
             await websocket.send(json.dumps({
                 "type": "process_status",
@@ -516,13 +538,13 @@ class WebSocketROS2Bridge(Node):
                 "status": "running"
             }))
 
-        # Send current UI state
+        # Send current UI state (selections) to keep UI consistent across devices
         await websocket.send(json.dumps({
             "type": "ui_state",
             "data": self.current_ui_state
         }))
 
-        # Send cached map and pose if available
+        # Send cached map and pose if available for immediate display
         if self.last_map_json:
             await websocket.send(self.last_map_json)
         if self.last_pose_json:
@@ -530,148 +552,101 @@ class WebSocketROS2Bridge(Node):
 
         try:
             async for message in websocket:
-                # Process incoming messages here
-                #print(f"Received message: {message}")
                 json_dada = json.loads(message)
                 
+                # --- Handle UI State synchronization ---
                 if json_dada['type'] == "ui_state":
-                    # Update global state
                     for key in json_dada['data']:
                         if key in self.current_ui_state:
                             self.current_ui_state[key] = json_dada['data'][key]
-                    # Broadcast to everyone else
+                    # Broadcast updated state to all other clients
                     await self.send_data_to_clients(json.dumps({
                         "type": "ui_state",
                         "data": self.current_ui_state
                     }))
                 
+                # --- Handle Robot Actions (Navigation, Localization) ---
                 elif(json_dada['type'] == "action"):
                     if(json_dada['name'] == "navtopose"):
-                        print(json_dada['data'])
+                        # Navigate to a specific point on the map
                         pp = self.convert_json_pose_to_poasestamp(json_dada['data'])
-                        print(pp)
                         self.send_goal_pose(pp)
                     if(json_dada['name'] == "set_pose"):
+                        # Manually set the robot's initial pose (kidnapped robot problem)
                         self.publish_initial_pose(json_dada['data'])
 
                     if(json_dada['name'] == "pathfollow"):
-                        print("Get follow path")
+                        # Follow a sequence of points (NavigateThroughPoses)
                         try:
-                            # --- NavigateThroughPoses ---
                             poses_p = self.convert_json_pose_array_to_poses(json_dada['data'])
-                            
-                            # Publish for visualization (Optional, might be heavy if big)
+                            # Publish for optional visualization in RViz
                             parray = self.convert_json_pose_array_to_pose_array(json_dada['data'])
                             self.pose_array_publisher.publish(parray)
                             
                             goal_poses = NavigateThroughPoses.Goal()
                             goal_poses.poses = poses_p
-                            
-                            # print("Sending goal poses...") # Reduce spam
                             self.send_goal_through_poses(goal_poses)
                         except Exception as e:
                             print(f"Error in pathfollow: {e}")
-                            import traceback
-                            traceback.print_exc()
 
                     if(json_dada['name'] == "gotowaypoint_by_name"):
+                        # Navigate to a saved waypoint using its name
                         data = json_dada.get('data', {})
                         map_name = data.get('map_name')
                         wp_name = data.get('waypoint_name')
                         
                         if not map_name or not wp_name:
-                            self.broadcast_message(json.dumps({
-                                "type": "nav_result",
-                                "success": False,
-                                "error": "Missing map_name or waypoint_name"
-                            }))
+                            self.broadcast_message(json.dumps({"type": "nav_result", "success": False, "error": "Missing map_name or waypoint_name"}))
                         else:
                             map_base = os.path.splitext(map_name)[0]
                             map_data = self.load_map_data(map_base)
                             waypoints = map_data.get("waypoints", [])
-                            
                             target_wp = next((wp for wp in waypoints if wp.get('name') == wp_name), None)
                             
                             if target_wp:
                                 pp = self.convert_json_pose_to_poasestamp(target_wp)
                                 self.send_goal_pose(pp)
-                                self.broadcast_message(json.dumps({
-                                    "type": "nav_status",
-                                    "text": f"Navigating to waypoint: {wp_name}",
-                                    "color": "blue"
-                                }))
+                                self.broadcast_message(json.dumps({"type": "nav_status", "text": f"Navigating to waypoint: {wp_name}", "color": "blue"}))
                             else:
-                                self.broadcast_message(json.dumps({
-                                    "type": "nav_result",
-                                    "success": False,
-                                    "error": f"Waypoint '{wp_name}' not found in map '{map_name}'"
-                                }))
+                                self.broadcast_message(json.dumps({"type": "nav_result", "success": False, "error": f"Waypoint '{wp_name}' not found"}))
                 
-                    
-                elif(json_dada['type'] == "topic"):
-                    if(json_dada['name'] == "dummytopic"):
-                        pass
-                elif(json_dada['type'] == "service"):
-                    if(json_dada['name'] == "dummyservice"):
-                        pass
+                # --- Handle System Processes (Launch/Kill Nodes) ---
                 elif(json_dada['type'] == "process"):
                     if(json_dada['name'] == "upstart"):
+                        # Start base robot drivers
                         launch_file_1 = os.path.join(os.getcwd(), 'minimal.py')
                         self.start_launch("minimal", launch_file_1)
                     if(json_dada['name'] == "stop_upstart"):
                         self.stop_launch('minimal')
                     if(json_dada['name'] == "start_slam"):
+                        # Start SLAM for mapping
                         launch_file_2 = os.path.join(os.getcwd(), 'slam_async_nav.py')
                         self.start_launch("slam_nav", launch_file_2)
                     if(json_dada['name'] == "stop_slam"):
                         self.stop_launch('slam_nav')
                     if(json_dada['name'] == "save_map"):
+                        # Save current SLAM map to file
                         map_name = json_dada.get('data', 'my_map')
                         map_path = os.path.join(self.map_save_path, map_name)
-                        # Use --free 0.15 to ensure unknown space (approx 0.196) is not classified as free (0.25 default)
                         cmd = ['ros2', 'run', 'nav2_map_server', 'map_saver_cli', '-f', map_path, '--free', '0.15']
                         try:
                             subprocess.Popen(cmd)
-                            print(f"Saving map to {map_path}")
-                            # Give it a moment to save, then update clients
                             asyncio.create_task(self.delayed_map_list_update())
                         except Exception as e:
                             print(f"Failed to save map: {e}")
                     if(json_dada['name'] == "start_nav"):
+                        # Start navigation stack with a specific map
                         map_name = json_dada.get('data')
                         if map_name:
-                            # Construct full path. Assume map name might not have .yaml extension if passed from UI list
-                            if not map_name.endswith('.yaml'):
-                                map_name += '.yaml'
-                            
+                            if not map_name.endswith('.yaml'): map_name += '.yaml'
                             map_path = os.path.join(self.map_save_path, map_name)
                             launch_file_nav = os.path.join(os.getcwd(), 'start_nav.py')
-                            
-                            # key=value arguments for ros2 launch
                             map_arg = f"map:={map_path}"
                             self.start_launch("nav_stack", launch_file_nav, args=[map_arg])
                     if(json_dada['name'] == "stop_nav"):
                         self.stop_launch('nav_stack')
-                    if(json_dada['name'] == "delete_map"):
-                        map_name = json_dada.get('data', '')
-                        if map_name:
-                            # Standardize map name (remove .yaml if present)
-                            map_base = os.path.splitext(map_name)[0]
-                            map_yaml = os.path.join(self.map_save_path, f"{map_base}.yaml")
-                            map_pgm = os.path.join(self.map_save_path, f"{map_base}.pgm")
-                            map_json = os.path.join(self.map_save_path, f"{map_base}.json")
-                            try:
-                                # Delete all associated files
-                                for file_path in [map_yaml, map_pgm, map_json]:
-                                    if os.path.exists(file_path):
-                                        os.remove(file_path)
-                                        print(f"Deleted {file_path}")
-                                
-                                # Update map list
-                                asyncio.create_task(self.delayed_map_list_update())
-                            except Exception as e:
-                                print(f"Error deleting map files for {map_name}: {e}")
 
+                    # --- Waypoint and Path database management ---
                     if(json_dada['name'] == "save_waypoint"):
                         data = json_dada.get('data')
                         if data:
@@ -680,19 +655,7 @@ class WebSocketROS2Bridge(Node):
                             if map_name and waypoint:
                                 map_base = os.path.splitext(map_name)[0]
                                 self.save_map_data(map_base, "waypoints", waypoint)
-                                # Broadcast updated list
                                 asyncio.create_task(self.broadcast_waypoint_list(websocket, self.load_map_data(map_base).get("waypoints", [])))
-
-                    if(json_dada['name'] == "save_path"):
-                        data = json_dada.get('data')
-                        if data:
-                            map_name = data.get('map_name')
-                            path_data = data.get('path')
-                            if map_name and path_data:
-                                map_base = os.path.splitext(map_name)[0]
-                                self.save_map_data(map_base, "paths", path_data)
-                                # Broadcast updated lists
-                                asyncio.create_task(self.broadcast_path_list(websocket, self.load_map_data(map_base).get("paths", [])))
 
                     if(json_dada['name'] == "load_waypoints"):
                         map_name = json_dada.get('data')

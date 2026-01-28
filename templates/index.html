@@ -24,8 +24,10 @@
   </div>
   <div class="container-fluid">
     <div class="row">
+      <!-- Column 1: Control Menu -->
       <div class="col s2 column-1 button-container">
         <h5>Menu Content</h5>
+        <!-- Context-sensitive actions driven by JavaScript event listeners -->
         <a href="#!" class="btn menu-btn" data-action="navtopose">Nav to pose</a>
         <a href="#!" class="btn menu-btn" data-action="setpose">Set Pose</a>
         <a href="#!" class="btn menu-btn" data-action="addwaypoint">Add Waypoint</a>
@@ -37,8 +39,10 @@
         <a href="#!" class="btn menu-btn" data-action="none">Disable All</a>
       </div>
 
+      <!-- Column 2: 3D Visualization Map -->
       <div class="col s6 column-2">
         <p>Map view (Hold Ctrl+Drag to Pan)</p>
+        <!-- The Three.js canvas will be injected inside this div -->
         <div id="3d-viewer"></div>
       </div>
 
@@ -56,9 +60,11 @@
           <div class="inner-col-right">
             <h6>Additional</h6>
             <p>Content here.</p>
-            <a href="#!" class="btn menu-btn btn-small btn-green toggle-btn" data-action="toggleminimal" id="btn-toggleminimal">Upstart</a>
+            <a href="#!" class="btn menu-btn btn-small btn-green toggle-btn" data-action="toggleminimal"
+              id="btn-toggleminimal">Upstart</a>
             <div style="margin-top: 10px;"></div>
-            <a href="#!" class="btn menu-btn btn-small btn-purple toggle-btn" data-action="toggleslam" id="btn-toggleslam">SLAM Nav</a>
+            <a href="#!" class="btn menu-btn btn-small btn-purple toggle-btn" data-action="toggleslam"
+              id="btn-toggleslam">SLAM Nav</a>
             <div style="margin-top: 10px;"></div>
             <a href="#!" class="btn menu-btn btn-small btn-orange" data-action="savemap">Save Map</a>
 
@@ -114,7 +120,8 @@
             </div>
 
             <div style="margin-top: 10px;"></div>
-            <a href="#!" class="btn menu-btn btn-small btn-teal toggle-btn" data-action="togglenav" id="btn-togglenav">Start Nav</a>
+            <a href="#!" class="btn menu-btn btn-small btn-teal toggle-btn" data-action="togglenav"
+              id="btn-togglenav">Start Nav</a>
 
             <div id="nav-status-container"
               style="margin-top: 10px; padding: 8px; background: #f5f5f5; border-radius: 4px; border-left: 3px solid #00897b;">
@@ -369,6 +376,10 @@
     const ws = new WebSocket(`ws://${wsHost}:8888`);
     var mapres = 0;
 
+    /**
+     * Initialize Three.js scene for 3D visualization.
+     * Sets up camera, renderer, lighting, and basic grid/axes.
+     */
     function initThreeJS() {
       var container = document.getElementById("3d-viewer");
       const scene = new THREE.Scene();
@@ -383,18 +394,21 @@
       renderer.setSize(container.clientWidth, container.clientWidth);
       container.appendChild(renderer.domElement);
 
-      const light = new THREE.AmbientLight(0x404040);
+      const light = new THREE.AmbientLight(0x404040); // Basic ambient light
       scene.add(light);
 
+      // Grid helper to represent the ground/map plane (100mx100m)
       var grid = new THREE.GridHelper(100, 10);
-      grid.geometry.rotateX(Math.PI / 2);
+      grid.geometry.rotateX(Math.PI / 2); // Align with XY plane as per ROS standards
       grid.renderOrder = 6;
       scene.add(grid);
 
+      // XYZ Axes Helper (Red=X, Green=Y, Blue=Z)
       const axesHelper = new THREE.AxesHelper(5);
       axesHelper.renderOrder = 8;
       scene.add(axesHelper);
 
+      // Robot arrow indicator to show current pose orientation
       const dir = new THREE.Vector3(1, 0, 0);
       dir.normalize();
       const origin = new THREE.Vector3(0, 0, 0);
@@ -558,16 +572,22 @@
         return points;
       }
 
+      /**
+       * Render valid points from LaserScan onto the Three.js scene.
+       */
       function renderPointCloud(points) {
         var geometry = new THREE.BufferGeometry();
         var vertices = new Float32Array(points.length * 3);
         for (var i = 0; i < points.length; i++) {
+          // Note: Dividing by map resolution if the points are in grid coordinates,
+          // though usually laser scans are in meters.
           vertices[i * 3] = points[i].x / mapres;
           vertices[i * 3 + 1] = points[i].y / mapres;
           vertices[i * 3 + 2] = points[i].z;
         }
         geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
         var material = new THREE.PointsMaterial({ color: 0xff0000, side: THREE.DoubleSide, size: 1 });
+
         if (pointCloud) {
           scene.remove(pointCloud);
         }
