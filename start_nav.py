@@ -68,7 +68,7 @@ def generate_launch_description():
                 output='screen',
                 parameters=[{
                     'type': 0, # Keepout filter
-                    'filter_info_topic': 'costmap_filter_info',
+                    'filter_info_topic': '/costmap_filter_info',
                     'mask_topic': '/filter_mask',
                     'base_frame_id': 'map',
                     'flip_x': False,
