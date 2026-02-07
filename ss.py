@@ -718,24 +718,28 @@ class WebSocketROS2Bridge(Node):
                                 
                                 yaml_content = {
                                     'image': f"{map_base}_mask.pgm",
-                                    'resolution': 0.05, # Default, will try to copy from main if possible
+                                    'resolution': 0.05,
                                     'origin': [0.0, 0.0, 0.0],
                                     'negate': 0,
                                     'occupied_thresh': 0.65,
-                                    'free_thresh': 0.196
+                                    'free_thresh': 0.196,
+                                    'mode': 'trinary'
                                 }
                                 
                                 if os.path.exists(main_yaml_path):
                                     try:
                                         with open(main_yaml_path, 'r') as f:
                                             main_yaml = yaml.safe_load(f)
-                                            yaml_content['resolution'] = main_yaml.get('resolution', 0.05)
-                                            yaml_content['origin'] = main_yaml.get('origin', [0.0, 0.0, 0.0])
+                                            # Copy alignment-critical fields
+                                            for field in ['resolution', 'origin', 'negate', 'occupied_thresh', 'free_thresh', 'mode']:
+                                                if field in main_yaml:
+                                                    yaml_content[field] = main_yaml[field]
                                     except Exception as e:
                                         print(f"Error reading main yaml for mask: {e}")
 
                                 with open(mask_yaml_path, 'w') as f:
-                                    yaml.dump(yaml_content, f)
+                                    # Use flow style for origin if it's a list, matching common ROS2 style
+                                    yaml.dump(yaml_content, f, default_flow_style=False)
                                 
                                 self.broadcast_message(json.dumps({"type": "mask_saved", "success": True, "map_name": map_name}))
                                 print(f"Saved mask for {map_name}")
