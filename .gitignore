@@ -40,4 +40,5 @@ Thumbs.db
 *.log
 
 # Maps
-amr_configs/maps/
+amr_configs/maps/*
+!amr_configs/maps/.gitkeep
