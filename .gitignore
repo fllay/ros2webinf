@@ -38,3 +38,6 @@ Thumbs.db
 *.tmp
 *.temp
 *.log
+
+# Maps
+amr_configs/maps/
