@@ -696,7 +696,7 @@ class WebSocketROS2Bridge(Node):
                                 # Our UI draws red/opaque for keepout, transparent for free.
                                 
                                 width, height = img.size
-                                grayscale_img = Image.new("L", (width, height), 255) # Start all white (free)
+                                grayscale_img = Image.new("L", (width, height), 255) 
                                 
                                 pixels = img.load()
                                 gs_pixels = grayscale_img.load()
@@ -704,9 +704,13 @@ class WebSocketROS2Bridge(Node):
                                 for y in range(height):
                                     for x in range(width):
                                         r, g, b, a = pixels[x, y]
-                                        # If pixel is not fully transparent, treat it as keepout (black)
-                                        if a > 0:
-                                            gs_pixels[x, y] = 0
+                                        # Detect red strokes from the UI
+                                        if r > 200 and g < 100 and b < 100:
+                                            gs_pixels[x, y] = 0 # Keepout (Black)
+                                        else:
+                                            # Preserve original map grayscale (White/Black/Gray)
+                                            # Using standard luminance formula
+                                            gs_pixels[x, y] = int(0.2989 * r + 0.5870 * g + 0.1140 * b)
                                 
                                 grayscale_img.save(mask_pgm_path)
                                 

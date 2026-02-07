@@ -438,7 +438,7 @@
       const waypointMarkers = new THREE.Group();
       scene.add(waypointMarkers);
 
-      let mapTexture, mapMaterial, mapMesh, org_x, org_y, pointCloud, mheight, arrowPose, map_quatanion;
+      let mapCanvas, mapTexture, mapMaterial, mapMesh, org_x, org_y, pointCloud, mheight, arrowPose, map_quatanion;
       let mapres = 0.05; // Default map resolution
       let enableNavToPose = false;
       let enableSetPose = false;
@@ -1054,10 +1054,10 @@
         map_quatanion = message.info.origin.orientation;
 
         const colors = ["#ffffff", "#000000", "#606060"];
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
+        mapCanvas = document.createElement("canvas");
+        mapCanvas.width = width;
+        mapCanvas.height = height;
+        const ctx = mapCanvas.getContext("2d");
 
         for (let y = 0; y < height; y++) {
           for (let x = 0; x < width; x++) {
@@ -1082,7 +1082,7 @@
           scene.remove(mapMesh);
         }
 
-        mapTexture = new THREE.CanvasTexture(canvas);
+        mapTexture = new THREE.CanvasTexture(mapCanvas);
         mapTexture.needsUpdate = true;
         mapMaterial = new THREE.MeshBasicMaterial({ map: mapTexture, side: THREE.DoubleSide });
         const mapGeometry = new THREE.PlaneGeometry(width, height);
@@ -1518,13 +1518,21 @@
       }
 
       function saveMask() {
-        if (!selectedMap || !maskCanvas) return;
+        if (!selectedMap || !maskCanvas || !mapCanvas) return;
 
-        // Convert mask canvas to base64
-        // Nav2 Keepout Filter expects a PGM. 
-        // We'll send it as base64 PNG and the server will convert it or save it.
-        // Actually, PGM is simpler for Nav2. We'll send raw data or use canvas context.
-        const maskData = maskCanvas.toDataURL("image/png");
+        // Create a composite canvas to merge the original map and the mask
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = maskCanvas.width;
+        tempCanvas.height = maskCanvas.height;
+        const tempCtx = tempCanvas.getContext("2d");
+
+        // 1. Draw the original map layout
+        tempCtx.drawImage(mapCanvas, 0, 0);
+
+        // 2. Draw the red mask strokes on top
+        tempCtx.drawImage(maskCanvas, 0, 0);
+
+        const maskData = tempCanvas.toDataURL("image/png");
 
         if (ws.readyState === WebSocket.OPEN) {
           const payload = {
@@ -1534,7 +1542,7 @@
             mask_data: maskData
           };
           ws.send(JSON.stringify(payload));
-          M.toast({ html: 'Saving mask...', classes: 'blue' });
+          M.toast({ html: 'Saving mask with context...', classes: 'blue' });
         }
       }
 
