@@ -1143,12 +1143,13 @@
         if (!maskCtx || !mapMesh || !enableEditMask) return;
         const intersect = getMousePosition(event);
         if (intersect) {
-          // Convert World (meters) -> Map (pixels)
-          // pixel_x = (world_x - origin_x) / resolution
-          // pixel_y = (world_y - origin_y) / resolution
+          // Convert Three.js World Coords (Grid Units) -> Map Pixels
+          // The scene is scaled such that 1 unit = 1 pixel (roughly, offset by origin)
+          // intersect.x = pixel_index + (org_x / mapres)
+          // pixel_x = intersect.x - (org_x / mapres)
 
-          const pixelX = Math.floor((intersect.x - org_x) / mapres);
-          const pixelY = Math.floor((intersect.y - org_y) / mapres);
+          const pixelX = Math.floor(intersect.x - (org_x / mapres));
+          const pixelY = Math.floor(intersect.y - (org_y / mapres));
 
           console.log(`Draw Debug: World(${intersect.x.toFixed(2)}, ${intersect.y.toFixed(2)}) -> Pixel(${pixelX}, ${pixelY}) | Map Origin(${org_x}, ${org_y}) Res(${mapres}) Size(${maskCanvas.width}x${maskCanvas.height})`);
 
