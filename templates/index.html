@@ -1140,25 +1140,36 @@
       }
 
       function drawMaskAtMouse(event) {
-        if (!maskCtx || !mapMesh) return;
+        if (!maskCtx || !mapMesh || !enableEditMask) return;
         const intersect = getMousePosition(event);
         if (intersect) {
-          const mapCenterX = mapMesh.position.x;
-          const mapCenterY = mapMesh.position.y;
-          const width = maskCanvas.width;
-          const height = maskCanvas.height;
+          // Convert World (meters) -> Map (pixels)
+          // pixel_x = (world_x - origin_x) / resolution
+          // pixel_y = (world_y - origin_y) / resolution
 
-          const localX = intersect.x - (mapCenterX - width / 2);
-          const localY = intersect.y - (mapCenterY - height / 2);
+          const pixelX = Math.floor((intersect.x - org_x) / mapres);
+          const pixelY = Math.floor((intersect.y - org_y) / mapres);
 
-          const canvasX = localX;
-          const canvasY = height - localY;
+          // Check bounds
+          if (pixelX >= 0 && pixelX < maskCanvas.width && pixelY >= 0 && pixelY < maskCanvas.height) {
 
-          if (canvasX >= 0 && canvasX < width && canvasY >= 0 && canvasY < height) {
+            // Draw on mask canvas
+            // We use globalCompositeOperation to handle erasing if needed, or just color
+            maskCtx.globalCompositeOperation = "source-over";
             maskCtx.fillStyle = "rgba(255, 0, 0, 1)"; // Red
+
+            // Draw circle
             maskCtx.beginPath();
-            maskCtx.arc(canvasX, canvasY, brushSize, 0, Math.PI * 2);
+            // Y is flipped in Canvas vs ROS Map usually? 
+            // ROS Map: (0,0) is bottom-left. Canvas: (0,0) is top-left.
+            // map-server/image_loader: image (0,0) is top-left.
+            // In drawMap, we did: const flippedY = height - 1 - y;
+            // So pixelY from formula is 'bottom-up'. Canvas needs 'top-down'.
+            const canvasY = maskCanvas.height - 1 - pixelY;
+
+            maskCtx.arc(pixelX, canvasY, brushSize, 0, Math.PI * 2);
             maskCtx.fill();
+
             maskTexture.needsUpdate = true;
           }
         }
