@@ -2026,10 +2026,17 @@
               this.classList.toggle('active', enableEditMask);
               document.getElementById('btn-savemask').classList.toggle('disabled', !enableEditMask);
               document.getElementById('brush-control').style.display = enableEditMask ? 'block' : 'none';
+
               if (enableEditMask) {
                 M.toast({ html: 'Drawing mode enabled. Click and drag to mark keepout zones.', classes: 'blue' });
                 if (maskMesh) maskMesh.visible = true;
                 document.getElementById('chk-showmask').checked = true;
+                // Ensure we don't start drawing immediately without a click
+                isDrawingMask = false;
+              } else {
+                // Reset drawing state when disabling
+                isDrawingMask = false;
+                M.toast({ html: 'Drawing mode disabled.', classes: 'grey' });
               }
               break;
             case "savemask":
@@ -2048,6 +2055,15 @@
 
       // Initialize button states
       updateButtonStates();
+
+      // Brush Size Slider Listener
+      const brushSlider = document.getElementById('brush-size');
+      if (brushSlider) {
+        brushSlider.addEventListener('input', function () {
+          brushSize = parseInt(this.value);
+          document.getElementById('brush-size-val').textContent = brushSize;
+        });
+      }
 
     } // End initThreeJS
 
