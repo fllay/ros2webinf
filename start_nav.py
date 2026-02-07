@@ -44,7 +44,11 @@ def generate_launch_description():
     # Path to keepout mask (derived from map name)
     # Note: This simple logic assumes the mask exists at [map_name]_mask.yaml
     # In a more robust setup, you might pass this as an explicit argument.
-    mask_yaml_file = [LaunchConfiguration('map'), '_mask.yaml']
+    # Mask path: replace .yaml with _mask.yaml
+    from launch.substitutions import PythonExpression
+    mask_yaml_file = PythonExpression([
+        '"', LaunchConfiguration('map'), '".replace(".yaml", "_mask.yaml")'
+    ])
 
     # Keepout Filter Servers
     keepout_servers = GroupAction(
