@@ -683,10 +683,32 @@ class WebSocketROS2Bridge(Node):
                             
                             try:
                                 # Decode base64 data
-                                import base64
+                                # Decode base64 data
                                 mask_bytes = base64.b64decode(mask_data_b64.split(',')[-1])
-                                with open(mask_pgm_path, 'wb') as f:
-                                    f.write(mask_bytes)
+                                
+                                # Use PIL to convert PNG (with transparency/red) to Grayscale PGM (Black/White)
+                                from PIL import Image
+                                import io
+                                
+                                img = Image.open(io.BytesIO(mask_bytes)).convert("RGBA")
+                                # Create a new grayscale image (L)
+                                # ROS2 Map Server: 0 is occupied (black), 255 is free (white)
+                                # Our UI draws red/opaque for keepout, transparent for free.
+                                
+                                width, height = img.size
+                                grayscale_img = Image.new("L", (width, height), 255) # Start all white (free)
+                                
+                                pixels = img.load()
+                                gs_pixels = grayscale_img.load()
+                                
+                                for y in range(height):
+                                    for x in range(width):
+                                        r, g, b, a = pixels[x, y]
+                                        # If pixel is not fully transparent, treat it as keepout (black)
+                                        if a > 0:
+                                            gs_pixels[x, y] = 0
+                                
+                                grayscale_img.save(mask_pgm_path)
                                 
                                 # Create YAML metadata for the mask
                                 # We assume the mask has the same resolution/origin as the main map
