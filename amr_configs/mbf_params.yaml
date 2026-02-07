@@ -1,0 +1,16 @@
+move_base_flex:
+  ros__parameters:
+    use_sim_time: true
+    global_frame: map
+    robot_base_frame: base_link
+
+    planners: [TestPlanner]
+    controllers: [TestController]
+    recoveries: [TestRecovery]   # optional if the recovery plugin exists
+
+    TestPlanner:
+      type: mbf_simple_nav/TestPlanner
+    TestController:
+      type: mbf_simple_nav/TestController
+    TestRecovery:
+      type: mbf_simple_nav/TestRecovery

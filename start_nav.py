@@ -10,13 +10,12 @@ def generate_launch_description():
         [FindPackageShare('nav2_bringup'), 'launch', 'bringup_launch.py']
     )
 
-    # Hardcoded config path as per request
-    nav2_config_path = '/home/pi/amr_configs/nav2_parameter.yaml'
+    nav2_config_path = '/home/pi/amr_configs/navigation_map.yaml'
     
-    # Declare the map argument
+    # We will pass the map path via argument
     map_path_arg = DeclareLaunchArgument(
         name='map',
-        default_value='/home/pi/amr_configs/maps/house2ndFloorNew.yaml',
+        default_value='/home/pi/amr_configs/maps/off1.yaml',
         description='Full path to the map yaml file'
     )
     
@@ -26,7 +25,6 @@ def generate_launch_description():
         description='Enable use_sim_time'
     )
 
-    # Include the Nav2 bringup launch
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(nav2_launch_path),
         launch_arguments={
