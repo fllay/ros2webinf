@@ -952,7 +952,10 @@ class WebSocketROS2Bridge(Node):
             
             self.launch_services[launch_name] = process
             self.get_logger().info(f"Started launch file '{launch_name}': {launch_file_path}")
-            asyncio.run(self.broadcast_process_status(launch_name, "running"))
+            
+            # Broadcast status to all clients
+            payload = json.dumps({"type": "process_status", "name": launch_name, "status": "running"})
+            self.broadcast_message(payload)
             
         except Exception as e:
             self.get_logger().error(f"Failed to start launch file '{launch_name}': {e}")
@@ -978,7 +981,10 @@ class WebSocketROS2Bridge(Node):
             
             del self.launch_services[launch_name]
             self.get_logger().info(f"Stopped launch file '{launch_name}'.")
-            asyncio.run(self.broadcast_process_status(launch_name, "stopped"))
+            
+            # Broadcast status to all clients
+            payload = json.dumps({"type": "process_status", "name": launch_name, "status": "stopped"})
+            self.broadcast_message(payload)
         except Exception as e:
             self.get_logger().error(f"Failed to stop launch file '{launch_name}': {e}")
 

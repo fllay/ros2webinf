@@ -429,7 +429,7 @@
       const waypointMarkers = new THREE.Group();
       scene.add(waypointMarkers);
 
-      let mheight, arrowPose, map_quatanion;
+      let mapTexture, mapMaterial, mapMesh, org_x, org_y, pointCloud, mheight, arrowPose, map_quatanion;
       let mapres = 0.05; // Default map resolution
       let enableNavToPose = false;
       let enableSetPose = false;
