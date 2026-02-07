@@ -663,9 +663,9 @@ class WebSocketROS2Bridge(Node):
                             args = [f"map:={map_path}"]
                             if use_keepout:
                                 args.append("use_keepout:=true")
-                                # Use a specific params file for keepout if desired, 
-                                # or keep using the default and expect the user to have configured it.
-                                # For now, we'll just enable the keepout servers.
+                                # Switch to the keepout-specific params file
+                                params_path = os.path.join(os.getcwd(), 'amr_configs/navigation_keepout.yaml')
+                                args.append(f"params_file:={params_path}")
                             
                             self.start_launch("nav_stack", launch_file_nav, args=args)
                     if(json_dada['name'] == "stop_nav"):
@@ -743,11 +743,22 @@ class WebSocketROS2Bridge(Node):
                                     except Exception as e:
                                         print(f"Error reading main yaml for mask: {e}")
 
+                                # Define custom representer for flow-style lists (local helper)
+                                class FlowList(list): pass
+                                def represent_flow_list(dumper, data):
+                                    return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=True)
+                                
+                                # Register safely
+                                yaml.add_representer(FlowList, represent_flow_list)
+                                
                                 print(f"Writing mask YAML content: {yaml_content}")
+                                
+                                # Convert origin to FlowList to force [x, y, z] style
+                                if 'origin' in yaml_content and isinstance(yaml_content['origin'], list):
+                                    yaml_content['origin'] = FlowList(yaml_content['origin'])
+
                                 with open(mask_yaml_path, 'w') as f:
-                                    # Use sort_keys=False to preserve the order we want
-                                    # We removed the FlowList trick as it might be unstable. 
-                                    # Standard dump should be fine, values matter most.
+                                    # sort_keys=False preserves insertion order from the loop above
                                     yaml.dump(yaml_content, f, sort_keys=False)
                                 
                                 self.broadcast_message(json.dumps({"type": "mask_saved", "success": True, "map_name": map_name}))
