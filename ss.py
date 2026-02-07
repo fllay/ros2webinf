@@ -116,7 +116,7 @@ class WebSocketROS2Bridge(Node):
         super().__init__('websocket_ros2_bridge')
         self.clients1 = clients
         self.websocket_uri = "ws://0.0.0.0:8888"
-        self.map_save_path = "/home/pi/amr_configs/maps"
+        self.map_save_path = os.path.join(os.getcwd(), "amr_configs/maps")
         #self.websocket_server = None
         # Start the WebSocket server in a separate thread
         self.websocket_thread = threading.Thread(target=self.start_websocket_server)

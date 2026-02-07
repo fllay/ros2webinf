@@ -19,13 +19,13 @@ def generate_launch_description():
     # Declare launch arguments
     map_path_arg = DeclareLaunchArgument(
         name='map',
-        default_value='/home/pi/amr_configs/maps/house2ndfloor.yaml',
+        default_value=os.path.join(os.getcwd(), 'amr_configs/maps/house2ndfloor.yaml'),
         description='Full path to the map yaml file'
     )
 
     params_file_arg = DeclareLaunchArgument(
         name='params_file',
-        default_value='/home/pi/amr_configs/navigation_map.yaml',
+        default_value=os.path.join(os.getcwd(), 'amr_configs/navigation_map.yaml'),
         description='Full path to the ROS2 parameters file'
     )
     
