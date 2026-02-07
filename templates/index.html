@@ -134,6 +134,15 @@
               </label>
             </div>
 
+            <div id="brush-control" style="margin-top: 5px; display: none;">
+              <div style="font-size: 10px; color: #555;">Brush Size: <span id="brush-size-val">5</span></div>
+              <input type="range" id="brush-size" min="1" max="20" value="5" style="width: 100%; margin: 0;" />
+              <div style="margin-top: 5px;">
+                <a href="#!" id="btn-clearmask"
+                  style="font-size: 10px; color: #f44336; text-decoration: underline;">Clear Mask</a>
+              </div>
+            </div>
+
             <div style="margin-top: 10px;"></div>
             <a href="#!" class="btn menu-btn btn-small btn-teal toggle-btn" data-action="togglenav"
               id="btn-togglenav">Start Nav</a>
@@ -445,6 +454,7 @@
       // Mask editing components
       let maskCanvas, maskCtx, maskTexture, maskMesh;
       let brushSize = 5;
+      let isDrawingMask = false;
 
       let isMinimalRunning = false;
       let isSlamRunning = false;
@@ -1129,6 +1139,31 @@
         robot_mesh.rotation.set(euler.x, euler.y, euler.z);
       }
 
+      function drawMaskAtMouse(event) {
+        if (!maskCtx || !mapMesh) return;
+        const intersect = getMousePosition(event);
+        if (intersect) {
+          const mapCenterX = mapMesh.position.x;
+          const mapCenterY = mapMesh.position.y;
+          const width = maskCanvas.width;
+          const height = maskCanvas.height;
+
+          const localX = intersect.x - (mapCenterX - width / 2);
+          const localY = intersect.y - (mapCenterY - height / 2);
+
+          const canvasX = localX;
+          const canvasY = height - localY;
+
+          if (canvasX >= 0 && canvasX < width && canvasY >= 0 && canvasY < height) {
+            maskCtx.fillStyle = "rgba(255, 0, 0, 1)"; // Red
+            maskCtx.beginPath();
+            maskCtx.arc(canvasX, canvasY, brushSize, 0, Math.PI * 2);
+            maskCtx.fill();
+            maskTexture.needsUpdate = true;
+          }
+        }
+      }
+
       ws.onopen = function () {
         console.log("WebSocket connection opened");
       };
@@ -1457,6 +1492,23 @@
         if (maskMesh) maskMesh.visible = this.checked;
       });
 
+      document.getElementById('brush-size').addEventListener('input', function () {
+        brushSize = parseInt(this.value);
+        document.getElementById('brush-size-val').innerText = brushSize;
+      });
+
+      document.getElementById('btn-clearmask').addEventListener('click', function (e) {
+        e.preventDefault();
+        if (confirm("Clear current mask drawing?")) {
+          if (maskCtx && maskCanvas) {
+            maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+            maskCtx.fillStyle = "rgba(255, 255, 255, 0)";
+            maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
+            maskTexture.needsUpdate = true;
+          }
+        }
+      });
+
       function toggleNav() {
         if (isNavRunning) {
           stopNav();
@@ -1633,6 +1685,12 @@
         if (enableNavToPose || enableSetPose || enableAddWaypoint) {
           startPoint = getMousePosition(event);
         }
+        if (enableEditMask) {
+          isDrawingMask = true;
+          drawMaskAtMouse(event);
+          return;
+        }
+
         if (enableDrawLine) {
           // ONLY add points on left click (button 0)
           // Right click is reserved for context menu "End"
@@ -1717,41 +1775,18 @@
             scene.add(line_cursor);
           }
         }
-        if (enableEditMask && maskCtx) {
-          const intersect = getMousePosition(event);
-          if (intersect) {
-            // Convert world coords to canvas coords
-            // mapMesh position is origin.x/res + width/2, origin.y/res + height/2
-            // Let's simplify: intersect.x, intersect.y are relative to world origin (0,0,0)
-            // But we want relative to map bottom-left.
-            // mapMesh center is at (origin.x/res + width/2, origin.y/res + height/2)
-            // width and height are in grid units.
-            // The canvas (0,0) is top-left.
-
-            const mapCenterX = mapMesh.position.x;
-            const mapCenterY = mapMesh.position.y;
-            const width = maskCanvas.width;
-            const height = maskCanvas.height;
-
-            const localX = intersect.x - (mapCenterX - width / 2);
-            const localY = intersect.y - (mapCenterY - height / 2);
-
-            // Flip Y for canvas
-            const canvasX = localX;
-            const canvasY = height - localY;
-
-            if (canvasX >= 0 && canvasX < width && canvasY >= 0 && canvasY < height) {
-              maskCtx.fillStyle = "rgba(255, 0, 0, 1)"; // Red for keepout
-              maskCtx.beginPath();
-              maskCtx.arc(canvasX, canvasY, brushSize, 0, Math.PI * 2);
-              maskCtx.fill();
-              maskTexture.needsUpdate = true;
-            }
-          }
+        if (enableEditMask && isDrawingMask && maskCtx) {
+          drawMaskAtMouse(event);
         }
       });
 
       mainCanvas.addEventListener("mouseup", (event) => {
+        // Stop drawing mask
+        if (isDrawingMask) {
+          isDrawingMask = false;
+          return;
+        }
+
         // Stop panning
         if (isPanning) {
           isPanning = false;
@@ -1969,8 +2004,9 @@
               enableEditMask = !enableEditMask;
               this.classList.toggle('active', enableEditMask);
               document.getElementById('btn-savemask').classList.toggle('disabled', !enableEditMask);
+              document.getElementById('brush-control').style.display = enableEditMask ? 'block' : 'none';
               if (enableEditMask) {
-                M.toast({ html: 'Drawing mode enabled. Draw on map to mark keepout zones.', classes: 'blue' });
+                M.toast({ html: 'Drawing mode enabled. Click and drag to mark keepout zones.', classes: 'blue' });
                 if (maskMesh) maskMesh.visible = true;
                 document.getElementById('chk-showmask').checked = true;
               }
