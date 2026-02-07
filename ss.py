@@ -732,8 +732,10 @@ class WebSocketROS2Bridge(Node):
                                 
                                 if os.path.exists(main_yaml_path):
                                     try:
+                                        print(f"Reading main yaml from: {main_yaml_path}")
                                         with open(main_yaml_path, 'r') as f:
                                             main_yaml = yaml.safe_load(f)
+                                            print(f"Main YAML content: {main_yaml}")
                                             # Copy all fields from main yaml to preserve format/values
                                             for key, value in main_yaml.items():
                                                 if key != 'image': # Don't overwrite mask image name
@@ -741,17 +743,11 @@ class WebSocketROS2Bridge(Node):
                                     except Exception as e:
                                         print(f"Error reading main yaml for mask: {e}")
 
-                                # To ensure 'origin' is on one line [x, y, z], we can use this trick
-                                class FlowList(list): pass
-                                def represent_flow_list(dumper, data):
-                                    return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=True)
-                                yaml.add_representer(FlowList, represent_flow_list)
-                                
-                                if 'origin' in yaml_content and isinstance(yaml_content['origin'], list):
-                                    yaml_content['origin'] = FlowList(yaml_content['origin'])
-
+                                print(f"Writing mask YAML content: {yaml_content}")
                                 with open(mask_yaml_path, 'w') as f:
                                     # Use sort_keys=False to preserve the order we want
+                                    # We removed the FlowList trick as it might be unstable. 
+                                    # Standard dump should be fine, values matter most.
                                     yaml.dump(yaml_content, f, sort_keys=False)
                                 
                                 self.broadcast_message(json.dumps({"type": "mask_saved", "success": True, "map_name": map_name}))
