@@ -638,20 +638,74 @@ class WebSocketROS2Bridge(Node):
                         except Exception as e:
                             print(f"Failed to save map: {e}")
                     if(json_dada['name'] == "start_nav"):
+                        # Start navigation stack with a specific map
                         map_name = json_dada.get('data')
+                        use_keepout = json_dada.get('use_keepout', False)
                         if map_name:
-                            # Construct full path. Assume map name might not have .yaml extension if passed from UI list
-                            if not map_name.endswith('.yaml'):
-                                map_name += '.yaml'
-                            
+                            if not map_name.endswith('.yaml'): map_name += '.yaml'
                             map_path = os.path.join(self.map_save_path, map_name)
                             launch_file_nav = os.path.join(os.getcwd(), 'start_nav.py')
                             
-                            # key=value arguments for ros2 launch
-                            map_arg = f"map:={map_path}"
-                            self.start_launch("nav_stack", launch_file_nav, args=[map_arg])
+                            args = [f"map:={map_path}"]
+                            if use_keepout:
+                                args.append("use_keepout:=true")
+                                # Use a specific params file for keepout if desired, 
+                                # or keep using the default and expect the user to have configured it.
+                                # For now, we'll just enable the keepout servers.
+                            
+                            self.start_launch("nav_stack", launch_file_nav, args=args)
                     if(json_dada['name'] == "stop_nav"):
                         self.stop_launch('nav_stack')
+
+                    if(json_dada['name'] == "save_mask"):
+                        # Save the keepout mask as a PGM image and YAML metadata
+                        map_name = json_dada.get('map_name')
+                        mask_data_b64 = json_dada.get('mask_data') # Base64 encoded PGM or raw bytes
+                        
+                        if map_name and mask_data_b64:
+                            map_base = os.path.splitext(map_name)[0]
+                            mask_pgm_path = os.path.join(self.map_save_path, f"{map_base}_mask.pgm")
+                            mask_yaml_path = os.path.join(self.map_save_path, f"{map_base}_mask.yaml")
+                            
+                            try:
+                                # Decode base64 data
+                                import base64
+                                mask_bytes = base64.b64decode(mask_data_b64.split(',')[-1])
+                                with open(mask_pgm_path, 'wb') as f:
+                                    f.write(mask_bytes)
+                                
+                                # Create YAML metadata for the mask
+                                # We assume the mask has the same resolution/origin as the main map
+                                # Users might need to adjust this if they use a different scale.
+                                main_yaml_path = os.path.join(self.map_save_path, f"{map_base}.yaml")
+                                import yaml # Assuming pyyaml is available or we can write manually
+                                
+                                yaml_content = {
+                                    'image': f"{map_base}_mask.pgm",
+                                    'resolution': 0.05, # Default, will try to copy from main if possible
+                                    'origin': [0.0, 0.0, 0.0],
+                                    'negate': 0,
+                                    'occupied_thresh': 0.65,
+                                    'free_thresh': 0.196
+                                }
+                                
+                                if os.path.exists(main_yaml_path):
+                                    try:
+                                        with open(main_yaml_path, 'r') as f:
+                                            main_yaml = yaml.safe_load(f)
+                                            yaml_content['resolution'] = main_yaml.get('resolution', 0.05)
+                                            yaml_content['origin'] = main_yaml.get('origin', [0.0, 0.0, 0.0])
+                                    except Exception as e:
+                                        print(f"Error reading main yaml for mask: {e}")
+
+                                with open(mask_yaml_path, 'w') as f:
+                                    yaml.dump(yaml_content, f)
+                                
+                                self.broadcast_message(json.dumps({"type": "mask_saved", "success": True, "map_name": map_name}))
+                                print(f"Saved mask for {map_name}")
+                            except Exception as e:
+                                print(f"Failed to save mask: {e}")
+                                self.broadcast_message(json.dumps({"type": "mask_saved", "success": False, "error": str(e)}))
                     if(json_dada['name'] == "delete_map"):
                         map_name = json_dada.get('data', '')
                         if map_name:

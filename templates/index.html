@@ -56,9 +56,11 @@
           <div class="inner-col-right">
             <h6>Additional</h6>
             <p>Content here.</p>
-            <a href="#!" class="btn menu-btn btn-small btn-green toggle-btn" data-action="toggleminimal" id="btn-toggleminimal">Upstart</a>
+            <a href="#!" class="btn menu-btn btn-small btn-green toggle-btn" data-action="toggleminimal"
+              id="btn-toggleminimal">Upstart</a>
             <div style="margin-top: 10px;"></div>
-            <a href="#!" class="btn menu-btn btn-small btn-purple toggle-btn" data-action="toggleslam" id="btn-toggleslam">SLAM Nav</a>
+            <a href="#!" class="btn menu-btn btn-small btn-purple toggle-btn" data-action="toggleslam"
+              id="btn-toggleslam">SLAM Nav</a>
             <div style="margin-top: 10px;"></div>
             <a href="#!" class="btn menu-btn btn-small btn-orange" data-action="savemap">Save Map</a>
 
@@ -114,7 +116,27 @@
             </div>
 
             <div style="margin-top: 10px;"></div>
-            <a href="#!" class="btn menu-btn btn-small btn-teal toggle-btn" data-action="togglenav" id="btn-togglenav">Start Nav</a>
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+              <a href="#!" class="btn menu-btn btn-small btn-blue" data-action="editmask" id="btn-editmask">Edit
+                Mask</a>
+              <a href="#!" class="btn menu-btn btn-small btn-green disabled" data-action="savemask"
+                id="btn-savemask">Save Mask</a>
+            </div>
+
+            <div style="margin-top: 5px; display: flex; align-items: center; gap: 10px;">
+              <label style="display: flex; align-items: center; color: #333; cursor: pointer;">
+                <input type="checkbox" id="chk-showmask" checked />
+                <span style="font-size: 11px;">Show Mask</span>
+              </label>
+              <label style="display: flex; align-items: center; color: #333; cursor: pointer;">
+                <input type="checkbox" id="chk-usekeepout" />
+                <span style="font-size: 11px;">Use Keepout</span>
+              </label>
+            </div>
+
+            <div style="margin-top: 10px;"></div>
+            <a href="#!" class="btn menu-btn btn-small btn-teal toggle-btn" data-action="togglenav"
+              id="btn-togglenav">Start Nav</a>
 
             <div id="nav-status-container"
               style="margin-top: 10px; padding: 8px; background: #f5f5f5; border-radius: 4px; border-left: 3px solid #00897b;">
@@ -407,17 +429,22 @@
       const waypointMarkers = new THREE.Group();
       scene.add(waypointMarkers);
 
-      let mapTexture, mapMaterial, mapMesh, org_x, org_y, pointCloud, mheight, arrowPose, map_quatanion;
+      let mheight, arrowPose, map_quatanion;
       let mapres = 0.05; // Default map resolution
       let enableNavToPose = false;
       let enableSetPose = false;
       let enableAddWaypoint = false;
       let enableDrawLine = false;
       let enablePathFollow = false;
+      let enableEditMask = false;
       let points = [];
       let line, line_cursor;
       let selectedMap = null;
       let selectedWaypoint = null;
+
+      // Mask editing components
+      let maskCanvas, maskCtx, maskTexture, maskMesh;
+      let brushSize = 5;
 
       let isMinimalRunning = false;
       let isSlamRunning = false;
@@ -1053,6 +1080,39 @@
         mapMesh.renderOrder = 1;
         mapMesh.position.set(origin.position.x / resolution + width / 2, origin.position.y / resolution + height / 2, 0);
         scene.add(mapMesh);
+
+        // Initialize Mask Canvas
+        initMask(width, height, origin, resolution);
+      }
+
+      function initMask(width, height, origin, resolution) {
+        if (maskMesh) scene.remove(maskMesh);
+
+        maskCanvas = document.createElement("canvas");
+        maskCanvas.width = width;
+        maskCanvas.height = height;
+        maskCtx = maskCanvas.getContext("2d");
+
+        // Fill with transparent white (255, 255, 255, 0)
+        maskCtx.fillStyle = "rgba(255, 255, 255, 0)";
+        maskCtx.fillRect(0, 0, width, height);
+
+        maskTexture = new THREE.CanvasTexture(maskCanvas);
+        maskTexture.needsUpdate = true;
+        const maskMaterial = new THREE.MeshBasicMaterial({
+          map: maskTexture,
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide
+        });
+        const maskGeometry = new THREE.PlaneGeometry(width, height);
+        maskMesh = new THREE.Mesh(maskGeometry, maskMaterial);
+        maskMesh.renderOrder = 2; // Above map
+        maskMesh.position.set(origin.position.x / resolution + width / 2, origin.position.y / resolution + height / 2, 0.01);
+        scene.add(maskMesh);
+
+        // Initial visibility
+        maskMesh.visible = document.getElementById('chk-showmask').checked;
       }
 
       const geometry_robot = new THREE.ConeGeometry(2, 6, 32);
@@ -1361,9 +1421,15 @@
             alert("Please select a map from the list first!");
             return;
           }
-          const payload = { type: "process", name: "start_nav", data: selectedMap };
+          const useKeepout = document.getElementById('chk-usekeepout').checked;
+          const payload = {
+            type: "process",
+            name: "start_nav",
+            data: selectedMap,
+            use_keepout: useKeepout
+          };
           ws.send(JSON.stringify(payload));
-          M.toast({ html: `Starting navigation with map: ${selectedMap}`, classes: 'green' });
+          M.toast({ html: `Starting navigation with map: ${selectedMap} (Keepout: ${useKeepout})`, classes: 'green' });
 
           isNavRunning = true;
           updateButtonStates();
@@ -1387,11 +1453,36 @@
         }
       }
 
+      document.getElementById('chk-showmask').addEventListener('change', function () {
+        if (maskMesh) maskMesh.visible = this.checked;
+      });
+
       function toggleNav() {
         if (isNavRunning) {
           stopNav();
         } else {
           startNav();
+        }
+      }
+
+      function saveMask() {
+        if (!selectedMap || !maskCanvas) return;
+
+        // Convert mask canvas to base64
+        // Nav2 Keepout Filter expects a PGM. 
+        // We'll send it as base64 PNG and the server will convert it or save it.
+        // Actually, PGM is simpler for Nav2. We'll send raw data or use canvas context.
+        const maskData = maskCanvas.toDataURL("image/png");
+
+        if (ws.readyState === WebSocket.OPEN) {
+          const payload = {
+            type: "process",
+            name: "save_mask",
+            map_name: selectedMap,
+            mask_data: maskData
+          };
+          ws.send(JSON.stringify(payload));
+          M.toast({ html: 'Saving mask...', classes: 'blue' });
         }
       }
 
@@ -1626,6 +1717,38 @@
             scene.add(line_cursor);
           }
         }
+        if (enableEditMask && maskCtx) {
+          const intersect = getMousePosition(event);
+          if (intersect) {
+            // Convert world coords to canvas coords
+            // mapMesh position is origin.x/res + width/2, origin.y/res + height/2
+            // Let's simplify: intersect.x, intersect.y are relative to world origin (0,0,0)
+            // But we want relative to map bottom-left.
+            // mapMesh center is at (origin.x/res + width/2, origin.y/res + height/2)
+            // width and height are in grid units.
+            // The canvas (0,0) is top-left.
+
+            const mapCenterX = mapMesh.position.x;
+            const mapCenterY = mapMesh.position.y;
+            const width = maskCanvas.width;
+            const height = maskCanvas.height;
+
+            const localX = intersect.x - (mapCenterX - width / 2);
+            const localY = intersect.y - (mapCenterY - height / 2);
+
+            // Flip Y for canvas
+            const canvasX = localX;
+            const canvasY = height - localY;
+
+            if (canvasX >= 0 && canvasX < width && canvasY >= 0 && canvasY < height) {
+              maskCtx.fillStyle = "rgba(255, 0, 0, 1)"; // Red for keepout
+              maskCtx.beginPath();
+              maskCtx.arc(canvasX, canvasY, brushSize, 0, Math.PI * 2);
+              maskCtx.fill();
+              maskTexture.needsUpdate = true;
+            }
+          }
+        }
       });
 
       mainCanvas.addEventListener("mouseup", (event) => {
@@ -1841,6 +1964,19 @@
                 ws.send(JSON.stringify(payload));
                 M.toast({ html: `Navigating to ${selectedWaypoint.name}...`, classes: 'blue' });
               }
+              break;
+            case "editmask":
+              enableEditMask = !enableEditMask;
+              this.classList.toggle('active', enableEditMask);
+              document.getElementById('btn-savemask').classList.toggle('disabled', !enableEditMask);
+              if (enableEditMask) {
+                M.toast({ html: 'Drawing mode enabled. Draw on map to mark keepout zones.', classes: 'blue' });
+                if (maskMesh) maskMesh.visible = true;
+                document.getElementById('chk-showmask').checked = true;
+              }
+              break;
+            case "savemask":
+              saveMask();
               break;
             case "none":
               if (line_cursor) scene.remove(line_cursor);
