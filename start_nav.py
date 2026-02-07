@@ -55,7 +55,11 @@ def generate_launch_description():
                 executable='map_server',
                 name='filter_mask_server',
                 output='screen',
-                parameters=[{'yaml_filename': mask_yaml_file}]
+                parameters=[{'yaml_filename': mask_yaml_file}],
+                remappings=[
+                    ('map', 'filter_mask'),
+                    ('map_server_on_lifecycle', 'filter_mask_server_on_lifecycle')
+                ]
             ),
             Node(
                 package='nav2_map_server',
