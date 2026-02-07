@@ -1,5 +1,6 @@
-import rclpy
 import os
+import rclpy
+from rclpy.qos import QoSProfile, DurabilityPolicy
 import subprocess
 import signal
 from rclpy.node import Node
@@ -126,11 +127,15 @@ class WebSocketROS2Bridge(Node):
 
        
 
+        map_qos = QoSProfile(
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            depth=1)
+
         self.subscription_map = self.create_subscription(
             OccupancyGrid,
             'map',
             self.map_callback,
-            10)
+            map_qos)
         self.subscription_map  # Prevent unused variable warning
 
         self.tf_buffer = Buffer()
@@ -282,13 +287,22 @@ class WebSocketROS2Bridge(Node):
 
         cloud_msg.header.stamp = time_msg #scan_msg.header.stamp  # Ensure correct timestamp
         try:
-            transform = self.tf_buffer.lookup_transform(
-                "map",  # target frame
-                cloud_msg.header.frame_id,  # source frame (laser frame)
-                rclpy.time.Time.from_msg(scan_msg.header.stamp),  # time at which the transform is needed
-            )
+            try:
+                transform = self.tf_buffer.lookup_transform(
+                    "map",  # target frame
+                    cloud_msg.header.frame_id,  # source frame (laser frame)
+                    rclpy.time.Time.from_msg(scan_msg.header.stamp),  # time at which the transform is needed
+                )
+            except (LookupException, ConnectivityException, ExtrapolationException):
+                # Fallback to latest available transform if exact time fails
+                transform = self.tf_buffer.lookup_transform(
+                    "map",
+                    cloud_msg.header.frame_id,
+                    rclpy.time.Time()
+                )
+            
             # Robot pose in map frame
-            transform_p = self.tf_buffer.lookup_transform('map', 'base_link', rclpy.time.Time())        
+            transform_p = self.tf_buffer.lookup_transform('map', 'base_link', rclpy.time.Time())
             # Laser scan in map frame as pointcloud2
             #transformed_cloud = tf2_sensor_msgs.tf2_sensor_msgs.do_transform_cloud(cloud_msg, transform)
             transformed_cloud = transform_pointcloud(cloud_msg, transform)
