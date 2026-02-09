@@ -135,8 +135,14 @@
             </div>
 
             <div id="brush-control" style="margin-top: 5px; display: none;">
-              <div style="font-size: 10px; color: #555;">Brush Size: <span id="brush-size-val">5</span></div>
-              <input type="range" id="brush-size" min="1" max="20" value="5" style="width: 100%; margin: 0;" />
+              <div class="mask-toolbar">
+                <button class="btn mask-tool-btn active" data-tool="brush" title="Brush">Brush</button>
+                <button class="btn mask-tool-btn" data-tool="eraser" title="Eraser">Eraser</button>
+                <button class="btn mask-tool-btn" data-tool="rectangle" title="Rectangle">Rect</button>
+                <button class="btn mask-tool-btn" data-tool="circle" title="Circle">Circle</button>
+              </div>
+              <div style="font-size: 10px; color: #555;">Tool Size: <span id="brush-size-val">5</span></div>
+              <input type="range" id="brush-size" min="1" max="50" value="5" style="width: 100%; margin: 0;" />
               <div style="margin-top: 5px;">
                 <a href="#!" id="btn-clearmask"
                   style="font-size: 10px; color: #f44336; text-decoration: underline;">Clear Mask</a>
@@ -391,6 +397,31 @@
     .custom-menu li:hover {
       background-color: #ddd;
     }
+
+    /* Mask Tool Toolbar */
+    .mask-toolbar {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 5px;
+    }
+
+    .mask-tool-btn {
+      flex: 1;
+      padding: 2px 5px !important;
+      font-size: 10px !important;
+      height: 24px !important;
+      line-height: 24px !important;
+      text-align: center;
+      background-color: #e0e0e0 !important;
+      color: #333 !important;
+      border: 1px solid #ccc !important;
+    }
+
+    .mask-tool-btn.active {
+      background-color: #2196f3 !important;
+      color: white !important;
+      font-weight: bold;
+    }
   </style>
 
   <script>
@@ -454,7 +485,10 @@
       // Mask editing components
       let maskCanvas, maskCtx, maskTexture, maskMesh;
       let brushSize = 5;
+      let previewCanvas, previewCtx, previewTexture, previewMesh; // Preview layer
       let isDrawingMask = false;
+      let currentMaskTool = 'brush'; // brush, eraser, rectangle, circle
+      let maskStartPixel = null; // {x, y} start point for shapes
 
       let isMinimalRunning = false;
       let isSlamRunning = false;
@@ -1123,6 +1157,30 @@
 
         // Initial visibility
         maskMesh.visible = document.getElementById('chk-showmask').checked;
+
+        // Initialize Preview Canvas (for shapes)
+        if (previewMesh) scene.remove(previewMesh);
+        previewCanvas = document.createElement("canvas");
+        previewCanvas.width = width;
+        previewCanvas.height = height;
+        previewCtx = previewCanvas.getContext("2d");
+        previewCtx.clearRect(0, 0, width, height);
+
+        previewTexture = new THREE.CanvasTexture(previewCanvas);
+        // previewTexture.minFilter = THREE.NearestFilter;
+        // previewTexture.magFilter = THREE.NearestFilter;
+        const previewMaterial = new THREE.MeshBasicMaterial({
+          map: previewTexture,
+          transparent: true,
+          opacity: 0.7,
+          side: THREE.DoubleSide
+        });
+        const previewGeometry = new THREE.PlaneGeometry(width, height);
+        previewMesh = new THREE.Mesh(previewGeometry, previewMaterial);
+        previewMesh.renderOrder = 3; // Above mask
+        previewMesh.position.set(origin.position.x / resolution + width / 2, origin.position.y / resolution + height / 2, 0.02);
+        scene.add(previewMesh);
+        previewMesh.visible = false; // Only show when drawing shapes
       }
 
       const geometry_robot = new THREE.ConeGeometry(2, 6, 32);
@@ -1139,43 +1197,141 @@
         robot_mesh.rotation.set(euler.x, euler.y, euler.z);
       }
 
-      function drawMaskAtMouse(event) {
-        if (!maskCtx || !mapMesh || !enableEditMask) return;
+      function getPixelFromEvent(event) {
         const intersect = getMousePosition(event);
-        if (intersect) {
-          // Convert Three.js World Coords (Grid Units) -> Map Pixels
-          // The scene is scaled such that 1 unit = 1 pixel (roughly, offset by origin)
-          // intersect.x = pixel_index + (org_x / mapres)
-          // pixel_x = intersect.x - (org_x / mapres)
-
+        if (intersect && maskCanvas) {
           const pixelX = Math.floor(intersect.x - (org_x / mapres));
           const pixelY = Math.floor(intersect.y - (org_y / mapres));
-
-          console.log(`Draw Debug: World(${intersect.x.toFixed(2)}, ${intersect.y.toFixed(2)}) -> Pixel(${pixelX}, ${pixelY}) | Map Origin(${org_x}, ${org_y}) Res(${mapres}) Size(${maskCanvas.width}x${maskCanvas.height})`);
-
-          // Check bounds
-          if (pixelX >= 0 && pixelX < maskCanvas.width && pixelY >= 0 && pixelY < maskCanvas.height) {
-
-            // Draw on mask canvas
-            // We use globalCompositeOperation to handle erasing if needed, or just color
-            maskCtx.globalCompositeOperation = "source-over";
-            maskCtx.fillStyle = "rgba(255, 0, 0, 1)"; // Red
-
-            // Draw circle
-            maskCtx.beginPath();
-            // Y is flipped in Canvas vs ROS Map usually? 
-            // ROS Map: (0,0) is bottom-left. Canvas: (0,0) is top-left.
-            // map-server/image_loader: image (0,0) is top-left.
-            // In drawMap, we did: const flippedY = height - 1 - y;
-            // So pixelY from formula is 'bottom-up'. Canvas needs 'top-down'.
-            const canvasY = maskCanvas.height - 1 - pixelY;
-
-            maskCtx.arc(pixelX, canvasY, brushSize, 0, Math.PI * 2);
-            maskCtx.fill();
-
-            maskTexture.needsUpdate = true;
-          }
+          // Canvas Y is top-down, ROS map is bottom-up (effectively)
+          // But our drawMap uses flippedY logic for display. 
+          // Let's stick to the pixel coordinates on the canvas.
+          // mapCanvas.getContext("2d") uses standard canvas coordinates (0,0 top-left).
+          // Our map texture is generated with: const flippedY = height - 1 - y;
+          // So the "visual" y corresponds to 'flippedY'.
+          // To draw on mask canvas at the visual location, we use canvasY.
+          const canvasY = maskCanvas.height - 1 - pixelY;
+          return { x: pixelX, y: canvasY };
         }
+        return null;
+      }
+
+      function handleMaskMouseDown(event) {
+        if (!maskCtx || !enableEditMask) return;
+        const pixel = getPixelFromEvent(event);
+        if (!pixel) return;
+
+        isDrawingMask = true;
+        maskStartPixel = pixel;
+
+        if (currentMaskTool === 'brush' || currentMaskTool === 'eraser') {
+          drawBrush(pixel);
+        } else if (currentMaskTool === 'rectangle' || currentMaskTool === 'circle') {
+          previewMesh.visible = true;
+        }
+      }
+
+      function handleMaskMouseMove(event) {
+        if (!isDrawingMask || !maskCtx || !enableEditMask) return;
+
+        const pixel = getPixelFromEvent(event);
+        if (!pixel) return;
+
+        if (currentMaskTool === 'brush' || currentMaskTool === 'eraser') {
+          drawBrush(pixel);
+        } else {
+          // Shape preview
+          drawShapePreview(pixel);
+        }
+      }
+
+      function handleMaskMouseUp(event) {
+        if (!isDrawingMask) return;
+        isDrawingMask = false;
+
+        if (currentMaskTool === 'rectangle' || currentMaskTool === 'circle') {
+          const pixel = getPixelFromEvent(event);
+          if (pixel && maskStartPixel) {
+            drawShapeFinal(pixel); // Draw to actual mask
+          }
+          // Clear preview
+          previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+          previewTexture.needsUpdate = true;
+          previewMesh.visible = false;
+          maskStartPixel = null;
+        }
+      }
+
+      function drawBrush(pixel) {
+        maskCtx.globalCompositeOperation = (currentMaskTool === 'eraser') ? "destination-out" : "source-over";
+        maskCtx.fillStyle = "rgba(255, 0, 0, 1)";
+        maskCtx.beginPath();
+        maskCtx.arc(pixel.x, pixel.y, brushSize, 0, Math.PI * 2);
+        maskCtx.fill();
+        maskTexture.needsUpdate = true;
+      }
+
+      function drawShapePreview(currentPixel) {
+        if (!maskStartPixel) return;
+
+        // Clear previous preview
+        previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+
+        previewCtx.fillStyle = "rgba(255, 0, 0, 0.5)"; // Semi-transparent for preview
+        previewCtx.strokeStyle = "rgba(255, 0, 0, 1)";
+        previewCtx.lineWidth = 1;
+
+        const x = Math.min(maskStartPixel.x, currentPixel.x);
+        const y = Math.min(maskStartPixel.y, currentPixel.y);
+        const w = Math.abs(currentPixel.x - maskStartPixel.x);
+        const h = Math.abs(currentPixel.y - maskStartPixel.y);
+
+        if (currentMaskTool === 'rectangle') {
+          previewCtx.fillRect(x, y, w, h);
+          previewCtx.strokeRect(x, y, w, h);
+        } else if (currentMaskTool === 'circle') {
+          // Calculate radius based on distance
+          const dx = currentPixel.x - maskStartPixel.x;
+          const dy = currentPixel.y - maskStartPixel.y;
+          const radius = Math.sqrt(dx * dx + dy * dy);
+
+          previewCtx.beginPath();
+          previewCtx.arc(maskStartPixel.x, maskStartPixel.y, radius, 0, Math.PI * 2);
+          previewCtx.fill();
+          previewCtx.stroke();
+        }
+
+        previewTexture.needsUpdate = true;
+      }
+
+      function drawShapeFinal(currentPixel) {
+        if (!maskStartPixel) return;
+
+        maskCtx.globalCompositeOperation = "source-over";
+        // We do not erase with shapes in this version, or do we want eraser shapes?
+        // Spec says "eraser tool", usually implied as brush. 
+        // Let's assume shapes are always ADDITIVE for now unless tool is eraser-shape (not requested).
+        // Actually, if we wanted subtractive shapes, we'd need a mode. 
+        // For now: shapes = Red (Keep-out). 
+
+        maskCtx.fillStyle = "rgba(255, 0, 0, 1)";
+
+        const x = Math.min(maskStartPixel.x, currentPixel.x);
+        const y = Math.min(maskStartPixel.y, currentPixel.y);
+        const w = Math.abs(currentPixel.x - maskStartPixel.x);
+        const h = Math.abs(currentPixel.y - maskStartPixel.y);
+
+        if (currentMaskTool === 'rectangle') {
+          maskCtx.fillRect(x, y, w, h);
+        } else if (currentMaskTool === 'circle') {
+          const dx = currentPixel.x - maskStartPixel.x;
+          const dy = currentPixel.y - maskStartPixel.y;
+          const radius = Math.sqrt(dx * dx + dy * dy);
+          maskCtx.beginPath();
+          maskCtx.arc(maskStartPixel.x, maskStartPixel.y, radius, 0, Math.PI * 2);
+          maskCtx.fill();
+        }
+
+        maskTexture.needsUpdate = true;
       }
 
       ws.onopen = function () {
@@ -1708,8 +1864,7 @@
           startPoint = getMousePosition(event);
         }
         if (enableEditMask) {
-          isDrawingMask = true;
-          drawMaskAtMouse(event);
+          handleMaskMouseDown(event);
           return;
         }
 
@@ -1797,15 +1952,15 @@
             scene.add(line_cursor);
           }
         }
-        if (enableEditMask && isDrawingMask && maskCtx) {
-          drawMaskAtMouse(event);
+        if (enableEditMask) {
+          handleMaskMouseMove(event);
         }
       });
 
       mainCanvas.addEventListener("mouseup", (event) => {
         // Stop drawing mask
         if (isDrawingMask) {
-          isDrawingMask = false;
+          handleMaskMouseUp(event);
           return;
         }
 
