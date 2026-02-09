@@ -2212,6 +2212,18 @@
       // Initialize button states
       updateButtonStates();
 
+      // Tool Selection
+      document.querySelectorAll('.mask-tool-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+          // Remove active class from all
+          document.querySelectorAll('.mask-tool-btn').forEach(b => b.classList.remove('active'));
+          // Add to click
+          this.classList.add('active');
+          currentMaskTool = this.getAttribute('data-tool');
+          console.log("Selected tool:", currentMaskTool);
+        });
+      });
+
       // Brush Size Slider Listener
       const brushSlider = document.getElementById('brush-size');
       if (brushSlider) {
