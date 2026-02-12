@@ -810,9 +810,11 @@ class WebSocketROS2Bridge(Node):
 
                     if(json_dada['name'] == "load_mask"):
                         map_name = json_dada.get('data')
+                        print(f"Backend: Received load_mask request for {map_name}")
                         if map_name:
                             map_base = os.path.splitext(map_name)[0]
                             mask_pgm_path = os.path.join(self.map_save_path, f"{map_base}_mask.pgm")
+                            print(f"Backend: Checking for mask at {mask_pgm_path}")
                             
                             if os.path.exists(mask_pgm_path):
                                 try:
@@ -821,28 +823,22 @@ class WebSocketROS2Bridge(Node):
                                     import base64
                                     
                                     img = Image.open(mask_pgm_path)
-                                    # Convert to RGBA for consistency
                                     img = img.convert("RGBA")
-                                    
-                                    # We want to keep the "red" zones red and "free" zones transparent
-                                    # But since it's a PGM, black usually means occupied (mask).
-                                    # However, to be efficient, we can just send the PNG and let the frontend handle the pixel conversion if needed,
-                                    # OR we do it here. Doing it in the frontend might be easier to manage transparency.
-                                    # Let's send a standard PNG of the mask.
                                     
                                     buffered = io.BytesIO()
                                     img.save(buffered, format="PNG")
                                     img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
                                     
+                                    print(f"Backend: Found mask, sending {len(img_str)} chars of base64 data")
                                     self.broadcast_message(json.dumps({
                                         "type": "mask_data",
                                         "data": f"data:image/png;base64,{img_str}",
                                         "map_name": map_name
                                     }))
-                                    print(f"Sent mask data for {map_name}")
                                 except Exception as e:
-                                    print(f"Error loading mask for {map_name}: {e}")
+                                    print(f"Backend Error: loading mask for {map_name}: {e}")
                             else:
+                                print(f"Backend: Mask file NOT FOUND at {mask_pgm_path}")
                                 # Mask doesn't exist, tell frontend to clear mask
                                 self.broadcast_message(json.dumps({
                                     "type": "mask_data",

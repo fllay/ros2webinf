@@ -508,6 +508,7 @@
       let lastMapListData = [];
       let lastWPListData = [];
       let lastPathListData = [];
+      let lastReceivedMaskData = null; // {map_name: string, data: base64}
 
       let selectedPath = null;
       let pathVisualization = null;
@@ -1163,6 +1164,12 @@
         // Initial visibility
         maskMesh.visible = document.getElementById('chk-showmask').checked;
 
+        // Apply cached mask if available and relevant
+        if (lastReceivedMaskData && lastReceivedMaskData.map_name === selectedMap) {
+          console.log("Frontend: initMask - applying cached mask data for", selectedMap);
+          drawMaskOverlay(lastReceivedMaskData.data);
+        }
+
         // Initialize Preview Canvas (for shapes)
         if (previewMesh) scene.remove(previewMesh);
         previewCanvas = document.createElement("canvas");
@@ -1340,9 +1347,14 @@
       }
 
       function drawMaskOverlay(base64Data) {
-        if (!maskCtx || !maskCanvas) return;
+        if (!maskCtx || !maskCanvas) {
+          console.log("Frontend: drawMaskOverlay deferred - maskCtx or maskCanvas not ready");
+          return;
+        }
+        console.log("Frontend: drawMaskOverlay - drawing mask...");
         const img = new Image();
         img.onload = function () {
+          console.log("Frontend: drawMaskOverlay - Image loaded, size:", img.width, "x", img.height);
           // Clear current mask
           maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
 
@@ -1386,9 +1398,12 @@
         }
 
         if (message.type === "mask_data") {
+          console.log("Frontend: Received mask_data for", message.map_name);
+          lastReceivedMaskData = { map_name: message.map_name, data: message.data };
           if (message.data) {
             drawMaskOverlay(message.data);
           } else {
+            console.log("Frontend: mask_data is empty (clear mask)");
             // No mask for this map, clear it
             if (maskCtx) {
               maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
