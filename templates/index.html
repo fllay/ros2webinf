@@ -123,15 +123,19 @@
                 id="btn-savemask">Save Mask</a>
             </div>
 
-            <div style="margin-top: 5px; display: flex; align-items: center; gap: 10px;">
-              <label style="display: flex; align-items: center; color: #333; cursor: pointer;">
-                <input type="checkbox" id="chk-showmask" checked />
-                <span style="font-size: 11px;">Show Mask</span>
-              </label>
-              <label style="display: flex; align-items: center; color: #333; cursor: pointer;">
-                <input type="checkbox" id="chk-usekeepout" />
-                <span style="font-size: 11px;">Use Keepout</span>
-              </label>
+            <div style="margin-top: 5px; display: flex; flex-direction: column; gap: 2px;">
+              <p style="margin: 0;">
+                <label style="color: #333;">
+                  <input type="checkbox" id="chk-showmask" checked="checked" />
+                  <span style="font-size: 11px; padding-left: 25px;">Show Mask</span>
+                </label>
+              </p>
+              <p style="margin: 0;">
+                <label style="color: #333;">
+                  <input type="checkbox" id="chk-usekeepout" />
+                  <span style="font-size: 11px; padding-left: 25px;">Use Keepout</span>
+                </label>
+              </p>
             </div>
 
             <div id="brush-control" style="margin-top: 5px; display: none;">
