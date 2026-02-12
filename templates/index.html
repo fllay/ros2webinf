@@ -671,6 +671,7 @@
             // Load waypoints and paths for selected map
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: "process", name: "load_waypoints", data: mapName }));
+              ws.send(JSON.stringify({ type: "process", name: "load_mask", data: mapName }));
             }
 
             saveUIState();
@@ -1334,6 +1335,41 @@
         maskTexture.needsUpdate = true;
       }
 
+      function drawMaskOverlay(base64Data) {
+        if (!maskCtx || !maskCanvas) return;
+        const img = new Image();
+        img.onload = function () {
+          // Clear current mask
+          maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+
+          // Draw image to a temporary canvas to read pixels
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = img.width;
+          tempCanvas.height = img.height;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.drawImage(img, 0, 0);
+
+          const imageData = tempCtx.getImageData(0, 0, img.width, img.height);
+          const pixels = imageData.data;
+
+          // Draw back to main mask canvas with our red style
+          maskCtx.fillStyle = "rgba(255, 0, 0, 1)";
+          for (let i = 0; i < pixels.length; i += 4) {
+            const r = pixels[i];
+            const g = pixels[i + 1];
+            const b = pixels[i + 2];
+            // If pixel is dark (black in PGM), it's part of the mask
+            if (r < 50 && g < 50 && b < 50) {
+              const x = (i / 4) % img.width;
+              const y = Math.floor((i / 4) / img.width);
+              maskCtx.fillRect(x, y, 1, 1);
+            }
+          }
+          maskTexture.needsUpdate = true;
+        };
+        img.src = base64Data;
+      }
+
       ws.onopen = function () {
         console.log("WebSocket connection opened");
       };
@@ -1343,6 +1379,18 @@
         if (message.type === "map_list") {
           updateMapList(message.data);
           hideLoading();
+        }
+
+        if (message.type === "mask_data") {
+          if (message.data) {
+            drawMaskOverlay(message.data);
+          } else {
+            // No mask for this map, clear it
+            if (maskCtx) {
+              maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+              maskTexture.needsUpdate = true;
+            }
+          }
         }
 
         if (message.type === "path_list") {
@@ -1357,6 +1405,7 @@
           if (currentServerState.selected_map && currentServerState.selected_map !== oldMap) {
             // Request waypoints for the newly synced map
             ws.send(JSON.stringify({ type: "process", name: "load_waypoints", data: currentServerState.selected_map }));
+            ws.send(JSON.stringify({ type: "process", name: "load_mask", data: currentServerState.selected_map }));
           }
 
           // Re-render lists to show highlights (they use currentServerState internally)
