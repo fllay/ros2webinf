@@ -79,6 +79,7 @@ The project consists of three main components:
 -   **Python Packages**:
     -   `rclpy` (ROS2 Python client library)
     -   `flask`
+    -   `flask-cors`
     -   `websockets`
     -   `numpy`
     -   `scipy`

@@ -4,6 +4,7 @@ from nav_msgs.msg import OccupancyGrid
 import multiprocessing
 from multiprocessing import Manager, Lock
 from flask import Flask, send_from_directory, render_template, jsonify
+from flask_cors import CORS
 import asyncio
 import websockets
 import functools
@@ -20,6 +21,7 @@ NAV2_NODES = [
 
 # Flask application
 app = Flask(__name__)
+CORS(app) # Enable CORS for all routes
 
 
 @app.route('/')
