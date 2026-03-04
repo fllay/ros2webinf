@@ -8,6 +8,7 @@ This project provides a web-based interface for monitoring and controlling a ROS
 - **Real-time Map Visualization**: Displays the global map (OccupancyGrid) from ROS2 with proper rendering of free space (white), occupied space (black), and unknown areas (gray).
 - **Robot State Tracking**: Visualizes the robot's current pose and laser scan data (Point Cloud).
 - **Navigation Status Display**: Real-time feedback showing distance to goal, current position, and navigation success/failure.
+- **REST APIs**: Independent HTTP endpoints to check if Nav2 is running (`/api/nav2_status`) and to retrieve the currently active map name (`/api/nav2_map`).
 
 ### Path Management System
 - **Interactive Path Drawing**: Left-click to add points, right-click and select "End" to finish.
@@ -305,6 +306,52 @@ const goal = {
 
 ws.send(JSON.stringify(goal));
 ```
+
+### REST API (HTTP)
+
+The `web.py` server provides independent REST endpoints to query the robot's status without needing a WebSocket connection. These are hosted on port `8000` by default.
+
+#### 1. Nav2 Status (`/api/nav2_status`)
+Checks whether the core Nav2 nodes are currently active.
+
+**Test with `curl`:**
+```bash
+curl http://<robot-ip>:8000/api/nav2_status
+```
+
+**Example Response (Nav2 Running):**
+```json
+{
+  "active_nodes": [
+    "/bt_navigator",
+    "/controller_server",
+    "/planner_server"
+  ],
+  "expected_nodes": [
+    "/bt_navigator",
+    "/planner_server",
+    "/controller_server"
+  ],
+  "nav2_running": true
+}
+```
+
+#### 2. Active Map Name (`/api/nav2_map`)
+Queries the `map_server` parameter to find out which map YAML file is currently loaded by Nav2.
+
+**Test with `curl`:**
+```bash
+curl http://<robot-ip>:8000/api/nav2_map
+```
+
+**Example Response:**
+```json
+{
+  "map_name": "home2ndfloor.yaml",
+  "map_path": "/home/pi/amr_configs/maps/home2ndfloor.yaml"
+}
+```
+If Nav2 or the map server is not running, `"map_name"` will be `null` and an error message will be provided.
 
 ## Map File Format
 
