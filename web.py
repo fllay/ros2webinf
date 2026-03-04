@@ -46,6 +46,26 @@ def nav2_status():
     except Exception as e:
         return jsonify({'nav2_running': False, 'error': str(e)}), 500
 
+@app.route('/api/nav2_map')
+def nav2_map():
+    try:
+        result = subprocess.run(
+            ['ros2', 'param', 'get', '/map_server', 'yaml_filename'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return jsonify({'map_name': None, 'error': 'map_server not running or param unavailable'}), 503
+
+        # Output looks like: "String value is: /path/to/map.yaml"
+        output = result.stdout.strip()
+        map_path = output.split(':', 1)[-1].strip()
+        map_name = map_path.split('/')[-1]  # Get just the filename
+        return jsonify({'map_name': map_name, 'map_path': map_path})
+    except subprocess.TimeoutExpired:
+        return jsonify({'map_name': None, 'error': 'timeout'}), 503
+    except Exception as e:
+        return jsonify({'map_name': None, 'error': str(e)}), 500
+
 app.run(host='0.0.0.0', port=8000)
 
 
