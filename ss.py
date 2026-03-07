@@ -971,15 +971,20 @@ class WebSocketROS2Bridge(Node):
 
     async def send_data_to_clients(self, data):
         try:
-            #print("Sending data to clients")  # Ensure this line is printed
             if not self.clients1:
-                #print("No clients connected")
                 return
 
+            disconnected = set()
             for websocket in self.clients1:
-                #print(f"Sending data to client: {websocket}")
-                await websocket.send(data)
-                #print(f"Data sent to client: {websocket}")
+                try:
+                    await websocket.send(data)
+                except websockets.ConnectionClosed:
+                    disconnected.add(websocket)
+                except Exception:
+                    disconnected.add(websocket)
+            
+            for ws in disconnected:
+                self.clients1.discard(ws)
         except Exception as e:
             print(f"Error in send_data_to_clients: {e}")
 
