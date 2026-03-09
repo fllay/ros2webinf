@@ -70,6 +70,158 @@ The project consists of three main components:
     -   Connects to the WebSocket bridge to push/pull data.
     -   Provides interactive controls for navigation and map management.
 
+## Block Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                              Web Browser (Frontend)                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐   │
+│  │                         Three.js Visualization                               │   │
+│  │   - Map (OccupancyGrid)    - Robot Pose    - Laser Scan (PointCloud2)      │   │
+│  │   - Waypoints    - Paths    - Navigation Status                              │   │
+│  └─────────────────────────────────────────────────────────────────────────────┘   │
+│                                          │                                          │
+│                            WebSocket (ws://robot:8888)                              │
+└──────────────────────────────────────────│──────────────────────────────────────────┘
+                                           │
+┌──────────────────────────────────────────│──────────────────────────────────────────┐
+│                                  ss.py                                              │
+│                           (ROS2 WebSocket Bridge)                                    │
+│                                                                                      │
+│  ┌─────────────────────────────┐    ┌─────────────────────────────┐                │
+│  │    SUBSCRIBED MESSAGES      │    │    PUBLISHED MESSAGES       │                │
+│  │                             │    │                             │                │
+│  │  /map                      │    │  /initialpose              │                │
+│  │  (nav_msgs/OccupancyGrid) │    │  (geometry_msgs/            │                │
+│  │                           │    │   PoseWithCovarianceStamped)│                │
+│  │  /scan                    │    │                             │                │
+│  │  (sensor_msgs/LaserScan)  │    │  /pose_array               │                │
+│  │                           │    │  (geometry_msgs/PoseArray)  │                │
+│  │  TF: map → base_link      │    │                             │                │
+│  │  (tf2_msgs/TFMessage)     │    │  /smoothed_path             │                │
+│  │                           │    │  (nav_msgs/Path)            │                │
+│  │                           │    │                             │                │
+│  │                           │    │  /scan_pointcloud            │                │
+│  │                           │    │  (sensor_msgs/PointCloud2)  │                │
+│  └─────────────────────────────┘    └─────────────────────────────┘                │
+│                                                                                      │
+│  ┌─────────────────────────────┐    ┌─────────────────────────────┐                │
+│  │    ACTION CLIENTS           │    │    ACTION SERVERS           │                │
+│  │                             │    │                             │                │
+│  │  /navigate_to_pose         │◄───│  Nav2 NavigateToPose        │                │
+│  │  (nav2_msgs/action.        │    │                             │                │
+│  │   NavigateToPose)          │    │  /navigate_through_poses    │                │
+│  │                           │    │  Nav2 NavigateThroughPoses │                │
+│  │  /navigate_through_poses  │◄───│                             │                │
+│  │  (nav2_msgs/action.       │    │  /follow_path               │                │
+│  │   NavigateThroughPoses)   │    │  Nav2 FollowPath            │                │
+│  │                           │    │                             │                │
+│  │  /follow_path            │◄───│                             │                │
+│  │  (nav2_msgs/action.       │    │                             │                │
+│  │   FollowPath)             │    │                             │                │
+│  └─────────────────────────────┘    └─────────────────────────────┘                │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+                                           │
+                        ┌──────────────────┼──────────────────┐
+                        │                  │                  │
+                        ▼                  ▼                  ▼
+              ┌─────────────────┐ ┌───────────────┐ ┌────────────────┐
+              │  Nav2 Stack     │ │  SLAM Toolbox │ │  Robot Driver  │
+              │                 │ │               │ │                │
+              │ - bt_navigator  │ │ - map         │ │ - /scan        │
+              │ - controller    │ │ - scan        │ │ - /odom        │
+              │ - planner       │ │ - map→odom    │ │ - /tf          │
+              │ - map_server    │ │               │ │ - /cmd_vel     │
+              └─────────────────┘ └───────────────┘ └────────────────┘
+```
+
+## Robot-Specific Modifications
+
+The following components need modification when adapting this system to a different robot:
+
+### 1. Topic Names (`ss.py`)
+
+| Topic | Line | Description |
+|:------|:-----|:------------|
+| `/map` | Line 136 | Map topic from SLAM or map server |
+| `/scan` | Line 146 | Laser scan topic from robot |
+| `/initialpose` | Line 158 | Initial pose estimate for localization |
+| `base_link` | Line 293, 305 | Robot's base frame ID |
+| `map` | Line 293, 305 | Global map frame ID |
+
+**Example modification:**
+```python
+# For a different laser topic
+self.subscription_scan = self.create_subscription(
+    LaserScan,
+    '/front_laser/scan',  # Changed from '/scan'
+    self.scan_callback,
+    10)
+```
+
+### 2. Action Server Names (`ss.py`)
+
+| Action | Line | Description |
+|:-------|:-----|:------------|
+| `/navigate_to_pose` | Line 152 | Single goal navigation |
+| `/navigate_through_poses` | Line 154 | Multi-waypoint navigation |
+| `/follow_path` | Line 153 | Path following |
+
+**Example modification:**
+```python
+# For custom action server names
+self.navpose_action_client = ActionClient(self, NavigateToPose, '/custom_navigate_to_pose')
+```
+
+### 3. TF Frame IDs (`ss.py`)
+
+| Frame | Line | Description |
+|:------|:-----|:------------|
+| `base_link` | Line 293, 305 | Robot's base frame |
+| `map` | Line 293, 305 | Global map frame |
+
+**Example modification:**
+```python
+# For a robot with different frame IDs
+transform = self.tf_buffer.lookup_transform(
+    "odom",  # Changed from "map"
+    "robot_base",  # Changed from "base_link"
+    rclpy.time.Time()
+)
+```
+
+### 4. Launch Files
+
+| File | Line | Purpose |
+|:-----|:-----|:--------|
+| `minimal.py` | ~633 | Robot driver launch |
+| `slam_async_nav.py` | ~638 | SLAM + navigation |
+| `start_nav.py` | ~661 | Nav2 with map |
+
+### 5. Configuration Files (`amr_configs/`)
+
+| File | Description | Commonly Modified |
+|:-----|:------------|:-------------------|
+| `navigation_map.yaml` | Nav2 parameters | Robot radius, TF prefixes, topic names |
+| `slam.yaml` | SLAM parameters | Laser topic, map frame |
+| `ekf.yaml` | Robot localization | IMU/odom frame IDs |
+| `navigation.yaml` | Nav2 behavior | BT XML, timeouts |
+
+### 6. Map Save Path (`ss.py`)
+
+```python
+# Line 120 - Change to your robot's storage location
+self.map_save_path = "/home/pi/amr_configs/maps"  # Default
+# Or:
+self.map_save_path = "/home/robot/amr_configs/maps"
+```
+
+### 7. Frontend Adjustments (`templates/index.html`)
+
+- Robot dimensions for visualization (if significantly different)
+- Color scheme preferences
+- Control button layout
+
 ## Prerequisites
 
 -   **ROS2** (e.g., Humble, Iron, Jazzy)
