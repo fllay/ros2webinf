@@ -655,18 +655,30 @@ class WebSocketROS2Bridge(Node):
                         # Start navigation stack with a specific map
                         map_name = json_dada.get('data')
                         use_keepout = json_dada.get('use_keepout', False)
+                        print(f"start_nav: map={map_name}, use_keepout={use_keepout}")
                         if map_name:
                             if not map_name.endswith('.yaml'): map_name += '.yaml'
                             map_path = os.path.join(self.map_save_path, map_name)
                             launch_file_nav = os.path.join(os.getcwd(), 'start_nav.py')
-                            
+
                             args = [f"map:={map_path}"]
                             if use_keepout:
-                                args.append("use_keepout:=true")
-                                # Switch to the keepout-specific params file
-                                params_path = os.path.join(os.getcwd(), 'amr_configs/navigation_keepout.yaml')
-                                args.append(f"params_file:={params_path}")
-                            
+                                map_base = os.path.splitext(map_name)[0]
+                                mask_yaml = os.path.join(self.map_save_path, f"{map_base}_mask.yaml")
+                                mask_pgm  = os.path.join(self.map_save_path, f"{map_base}_mask.pgm")
+                                if not os.path.exists(mask_yaml) or not os.path.exists(mask_pgm):
+                                    print(f"Keepout mask not found for {map_base}, starting nav without keepout")
+                                    self.broadcast_message(json.dumps({
+                                        "type": "nav_error",
+                                        "message": f"No keepout mask saved for '{map_base}'. Draw and save a mask first, or uncheck Use Keepout."
+                                    }))
+                                    use_keepout = False
+                                else:
+                                    args.append("use_keepout:=true")
+                                    # Switch to the keepout-specific params file
+                                    params_path = os.path.join(os.getcwd(), 'amr_configs/navigation_keepout.yaml')
+                                    args.append(f"params_file:={params_path}")
+
                             self.start_launch("nav_stack", launch_file_nav, args=args)
                     if(json_dada['name'] == "stop_nav"):
                         self.stop_launch('nav_stack')
@@ -820,8 +832,7 @@ class WebSocketROS2Bridge(Node):
                                 try:
                                     from PIL import Image
                                     import io
-                                    import base64
-                                    
+
                                     img = Image.open(mask_pgm_path)
                                     img = img.convert("RGBA")
                                     
@@ -889,7 +900,7 @@ class WebSocketROS2Bridge(Node):
         try:
             if os.path.exists(self.map_save_path):
                 for file in os.listdir(self.map_save_path):
-                    if file.endswith(".yaml"):
+                    if file.endswith(".yaml") and not file.endswith("_mask.yaml"):
                         maps.append(os.path.splitext(file)[0])
         except Exception as e:
             print(f"Error listing maps: {e}")
@@ -975,14 +986,14 @@ class WebSocketROS2Bridge(Node):
                 return
 
             disconnected = set()
-            for websocket in self.clients1:
+            for websocket in set(self.clients1):  # snapshot to avoid mutation during iteration
                 try:
-                    await websocket.send(data)
-                except websockets.ConnectionClosed:
+                    await asyncio.wait_for(websocket.send(data), timeout=2.0)
+                except (websockets.ConnectionClosed, asyncio.TimeoutError):
                     disconnected.add(websocket)
                 except Exception:
                     disconnected.add(websocket)
-            
+
             for ws in disconnected:
                 self.clients1.discard(ws)
         except Exception as e:
@@ -993,9 +1004,7 @@ class WebSocketROS2Bridge(Node):
         if hasattr(self, 'loop') and self.loop.is_running():
             asyncio.run_coroutine_threadsafe(self.send_data_to_clients(data), self.loop)
         else:
-            # Fallback if loop isn't ready or we are on the main thread (less likely here)
-            # print("Warning: WebSocket loop not ready for broadcast")
-            pass
+            self.get_logger().warning("broadcast_message: WebSocket loop not running, message dropped")
 
 
     def ros2_msg_to_json(self, topic_name, msg):
