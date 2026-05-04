@@ -488,6 +488,7 @@
 
       // Mask editing components
       let maskCanvas, maskCtx, maskTexture, maskMesh;
+      let maskInitializedForMap = null;
       let brushSize = 5;
       let previewCanvas, previewCtx, previewTexture, previewMesh; // Preview layer
       let isDrawingMask = false;
@@ -495,8 +496,11 @@
       let maskStartPixel = null; // {x, y} start point for shapes
 
       let isMinimalRunning = false;
+      let isMinimalStopping = false;
       let isSlamRunning = false;
+      let isSlamStopping = false;
       let isNavRunning = false;
+      let isNavStopping = false;
 
       // Server-side UI State
       let currentServerState = {
@@ -555,30 +559,48 @@
         const btnToggleNav = document.getElementById('btn-togglenav');
 
         // Minimal
-        if (isMinimalRunning) {
+        if (isMinimalStopping) {
+          btnToggleMinimal.classList.add('active');
+          btnToggleMinimal.textContent = 'Stopping...';
+          btnToggleMinimal.disabled = true;
+        } else if (isMinimalRunning) {
           btnToggleMinimal.classList.add('active');
           btnToggleMinimal.textContent = 'Stop';
+          btnToggleMinimal.disabled = false;
         } else {
           btnToggleMinimal.classList.remove('active');
           btnToggleMinimal.textContent = 'Upstart';
+          btnToggleMinimal.disabled = false;
         }
 
         // SLAM
-        if (isSlamRunning) {
+        if (isSlamStopping) {
+          btnToggleSlam.classList.add('active');
+          btnToggleSlam.textContent = 'Stopping...';
+          btnToggleSlam.disabled = true;
+        } else if (isSlamRunning) {
           btnToggleSlam.classList.add('active');
           btnToggleSlam.textContent = 'Stop SLAM';
+          btnToggleSlam.disabled = false;
         } else {
           btnToggleSlam.classList.remove('active');
           btnToggleSlam.textContent = 'SLAM Nav';
+          btnToggleSlam.disabled = false;
         }
 
         // Nav
-        if (isNavRunning) {
+        if (isNavStopping) {
+          btnToggleNav.classList.add('active');
+          btnToggleNav.textContent = 'Stopping...';
+          btnToggleNav.disabled = true;
+        } else if (isNavRunning) {
           btnToggleNav.classList.add('active');
           btnToggleNav.textContent = 'Stop Nav';
+          btnToggleNav.disabled = false;
         } else {
           btnToggleNav.classList.remove('active');
           btnToggleNav.textContent = 'Start Nav';
+          btnToggleNav.disabled = false;
         }
       }
 
@@ -1136,63 +1158,81 @@
       }
 
       function initMask(width, height, origin, resolution) {
-        if (maskMesh) scene.remove(maskMesh);
+        const dimensionsChanged = !maskCanvas || maskCanvas.width !== width || maskCanvas.height !== height;
+        const mapChanged = maskInitializedForMap !== selectedMap;
 
-        maskCanvas = document.createElement("canvas");
-        maskCanvas.width = width;
-        maskCanvas.height = height;
-        maskCtx = maskCanvas.getContext("2d");
+        if (dimensionsChanged) {
+          if (maskMesh) scene.remove(maskMesh);
 
-        // Fill with transparent white (255, 255, 255, 0)
-        maskCtx.fillStyle = "rgba(255, 255, 255, 0)";
-        maskCtx.fillRect(0, 0, width, height);
+          maskCanvas = document.createElement("canvas");
+          maskCanvas.width = width;
+          maskCanvas.height = height;
+          maskCtx = maskCanvas.getContext("2d");
 
-        maskTexture = new THREE.CanvasTexture(maskCanvas);
-        maskTexture.needsUpdate = true;
-        const maskMaterial = new THREE.MeshBasicMaterial({
-          map: maskTexture,
-          transparent: true,
-          opacity: 0.5,
-          side: THREE.DoubleSide
-        });
-        const maskGeometry = new THREE.PlaneGeometry(width, height);
-        maskMesh = new THREE.Mesh(maskGeometry, maskMaterial);
-        maskMesh.renderOrder = 2; // Above map
-        maskMesh.position.set(origin.position.x / resolution + width / 2, origin.position.y / resolution + height / 2, 0.01);
-        scene.add(maskMesh);
+          maskCtx.fillStyle = "rgba(255, 255, 255, 0)";
+          maskCtx.fillRect(0, 0, width, height);
 
-        // Initial visibility
-        maskMesh.visible = document.getElementById('chk-showmask').checked;
+          maskTexture = new THREE.CanvasTexture(maskCanvas);
+          maskTexture.needsUpdate = true;
+          const maskMaterial = new THREE.MeshBasicMaterial({
+            map: maskTexture,
+            transparent: true,
+            opacity: 0.5,
+            side: THREE.DoubleSide
+          });
+          const maskGeometry = new THREE.PlaneGeometry(width, height);
+          maskMesh = new THREE.Mesh(maskGeometry, maskMaterial);
+          maskMesh.renderOrder = 2;
+          scene.add(maskMesh);
+        } else if (mapChanged) {
+          // Same canvas size, different map: clear the old drawing
+          maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+          maskCtx.fillStyle = "rgba(255, 255, 255, 0)";
+          maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
+          maskTexture.needsUpdate = true;
+        }
+        // else: same map, same dimensions → keep canvas (preserves unsaved drawings)
 
-        // Apply cached mask if available and relevant
-        if (lastReceivedMaskData && lastReceivedMaskData.map_name === selectedMap) {
-          console.log("Frontend: initMask - applying cached mask data for", selectedMap);
-          drawMaskOverlay(lastReceivedMaskData.data);
+        if (dimensionsChanged || mapChanged) {
+          maskInitializedForMap = selectedMap;
+          if (lastReceivedMaskData && lastReceivedMaskData.map_name === selectedMap) {
+            console.log("Frontend: initMask - applying cached mask data for", selectedMap);
+            drawMaskOverlay(lastReceivedMaskData.data);
+          }
         }
 
-        // Initialize Preview Canvas (for shapes)
-        if (previewMesh) scene.remove(previewMesh);
-        previewCanvas = document.createElement("canvas");
-        previewCanvas.width = width;
-        previewCanvas.height = height;
-        previewCtx = previewCanvas.getContext("2d");
-        previewCtx.clearRect(0, 0, width, height);
+        if (maskMesh) {
+          maskMesh.position.set(origin.position.x / resolution + width / 2, origin.position.y / resolution + height / 2, 0.01);
+          maskMesh.visible = document.getElementById('chk-showmask').checked;
+        }
 
-        previewTexture = new THREE.CanvasTexture(previewCanvas);
-        // previewTexture.minFilter = THREE.NearestFilter;
-        // previewTexture.magFilter = THREE.NearestFilter;
-        const previewMaterial = new THREE.MeshBasicMaterial({
-          map: previewTexture,
-          transparent: true,
-          opacity: 0.7,
-          side: THREE.DoubleSide
-        });
-        const previewGeometry = new THREE.PlaneGeometry(width, height);
-        previewMesh = new THREE.Mesh(previewGeometry, previewMaterial);
-        previewMesh.renderOrder = 3; // Above mask
-        previewMesh.position.set(origin.position.x / resolution + width / 2, origin.position.y / resolution + height / 2, 0.02);
-        scene.add(previewMesh);
-        previewMesh.visible = false; // Only show when drawing shapes
+        const previewDimensionsChanged = !previewCanvas || previewCanvas.width !== width || previewCanvas.height !== height;
+
+        if (previewDimensionsChanged) {
+          if (previewMesh) scene.remove(previewMesh);
+          previewCanvas = document.createElement("canvas");
+          previewCanvas.width = width;
+          previewCanvas.height = height;
+          previewCtx = previewCanvas.getContext("2d");
+          previewCtx.clearRect(0, 0, width, height);
+
+          previewTexture = new THREE.CanvasTexture(previewCanvas);
+          const previewMaterial = new THREE.MeshBasicMaterial({
+            map: previewTexture,
+            transparent: true,
+            opacity: 0.7,
+            side: THREE.DoubleSide
+          });
+          const previewGeometry = new THREE.PlaneGeometry(width, height);
+          previewMesh = new THREE.Mesh(previewGeometry, previewMaterial);
+          previewMesh.renderOrder = 3;
+          scene.add(previewMesh);
+        }
+
+        if (previewMesh) {
+          previewMesh.position.set(origin.position.x / resolution + width / 2, origin.position.y / resolution + height / 2, 0.02);
+          previewMesh.visible = false;
+        }
       }
 
       const geometry_robot = new THREE.ConeGeometry(2, 6, 32);
@@ -1404,12 +1444,18 @@
             drawMaskOverlay(message.data);
           } else {
             console.log("Frontend: mask_data is empty (clear mask)");
-            // No mask for this map, clear it
             if (maskCtx) {
               maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
               maskTexture.needsUpdate = true;
             }
+            if (document.getElementById('chk-usekeepout').checked) {
+              M.toast({ html: `No keepout mask saved for '${message.map_name}'. Draw zones and save a mask first.`, classes: 'orange', displayLength: 5000 });
+            }
           }
+        }
+
+        if (message.type === "nav_error") {
+          M.toast({ html: message.message, classes: 'red darken-2', displayLength: 6000 });
         }
 
         if (message.type === "path_list") {
@@ -1434,28 +1480,33 @@
         }
 
         if (message.type === "process_status") {
-          // Update state
-          const status = message.status === "running";
-          if (message.name === "minimal") isMinimalRunning = status;
-          if (message.name === "slam_nav") isSlamRunning = status;
-          if (message.name === "nav_stack") isNavRunning = status;
+          const s = message.status; // "running" | "stopping" | "stopped"
 
-          hideLoading();
-          updateButtonStates();
-
-          // Update nav status when nav_stack changes
+          if (message.name === "minimal") {
+            isMinimalRunning = s === "running";
+            isMinimalStopping = s === "stopping";
+            if (s === "stopped") M.toast({ html: 'Upstart fully stopped.', classes: 'red darken-1' });
+          }
+          if (message.name === "slam_nav") {
+            isSlamRunning = s === "running";
+            isSlamStopping = s === "stopping";
+            if (s === "stopped") M.toast({ html: 'SLAM fully stopped.', classes: 'red darken-1' });
+          }
           if (message.name === "nav_stack") {
-            if (status) {
+            isNavRunning = s === "running";
+            isNavStopping = s === "stopping";
+            if (s === "running") {
               updateNavStatus("Navigation started", "#00897b");
+            } else if (s === "stopping") {
+              updateNavStatus("Stopping...", "#e65100");
             } else {
               updateNavStatus("Idle", "#666");
+              M.toast({ html: 'Navigation fully stopped.', classes: 'red darken-1' });
             }
           }
 
-          // Optional: Clear selection if Nav stopped
-          if (message.name === "nav_stack" && !status) {
-            // Maybe keep selection? User choice.
-          }
+          hideLoading();
+          updateButtonStates();
         }
         if (message.type === "nav_feedback") {
           // Display navigation feedback
@@ -1620,10 +1671,6 @@
         if (ws.readyState === WebSocket.OPEN) {
           const payload = { type: "process", name: "stop_upstart" };
           ws.send(JSON.stringify(payload));
-          M.toast({ html: 'Stop command sent!', classes: 'orange' });
-
-          isMinimalRunning = false;
-          updateButtonStates();
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -1631,6 +1678,7 @@
       }
 
       function toggleMinimal() {
+        if (isMinimalStopping) return;
         if (isMinimalRunning) {
           stopMinimal();
         } else {
@@ -1656,10 +1704,6 @@
         if (ws.readyState === WebSocket.OPEN) {
           const payload = { type: "process", name: "stop_slam" };
           ws.send(JSON.stringify(payload));
-          M.toast({ html: 'SLAM Stop command sent!', classes: 'orange' });
-
-          isSlamRunning = false;
-          updateButtonStates();
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -1667,6 +1711,7 @@
       }
 
       function toggleSlam() {
+        if (isSlamStopping) return;
         if (isSlamRunning) {
           stopSlam();
         } else {
@@ -1716,10 +1761,6 @@
         if (ws.readyState === WebSocket.OPEN) {
           const payload = { type: "process", name: "stop_nav" };
           ws.send(JSON.stringify(payload));
-          M.toast({ html: 'Stopping navigation...', classes: 'orange' });
-
-          isNavRunning = false;
-          updateButtonStates();
         } else {
           console.error("WebSocket is not connected. State:", ws.readyState);
           alert("WebSocket is not connected. Please ensure ss.py is running and refresh the page.");
@@ -1728,6 +1769,41 @@
 
       document.getElementById('chk-showmask').addEventListener('change', function () {
         if (maskMesh) maskMesh.visible = this.checked;
+      });
+
+      document.getElementById('chk-usekeepout').addEventListener('change', function () {
+        if (!selectedMap || ws.readyState !== WebSocket.OPEN) return;
+        if (this.checked) {
+          ws.send(JSON.stringify({ type: "process", name: "load_mask", data: selectedMap }));
+          document.getElementById('chk-showmask').checked = true;
+          if (maskMesh) maskMesh.visible = true;
+        } else {
+          if (maskCtx && maskCanvas) {
+            maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+            maskTexture.needsUpdate = true;
+          }
+          lastReceivedMaskData = null;
+          maskInitializedForMap = null;
+        }
+
+        // If navigation is already running, restart it with the new keepout setting
+        if (isNavRunning) {
+          const useKeepout = this.checked;
+          M.toast({ html: `Restarting navigation ${useKeepout ? 'with' : 'without'} keepout...`, classes: 'blue', displayLength: 3000 });
+          // Stop current nav
+          ws.send(JSON.stringify({ type: "process", name: "stop_nav" }));
+          // Wait for nav to stop, then restart with new keepout setting
+          setTimeout(function () {
+            const payload = {
+              type: "process",
+              name: "start_nav",
+              data: selectedMap,
+              use_keepout: useKeepout
+            };
+            ws.send(JSON.stringify(payload));
+            M.toast({ html: `Navigation restarted (Keepout: ${useKeepout})`, classes: 'green' });
+          }, 2000);
+        }
       });
 
       document.getElementById('brush-size').addEventListener('input', function () {
@@ -1748,6 +1824,7 @@
       });
 
       function toggleNav() {
+        if (isNavStopping) return;
         if (isNavRunning) {
           stopNav();
         } else {

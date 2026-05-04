@@ -1066,23 +1066,31 @@ class WebSocketROS2Bridge(Node):
 
         try:
             process = self.launch_services[launch_name]
+            del self.launch_services[launch_name]
+
             # Send SIGINT to the entire process group mimicing Ctrl-C
             os.killpg(os.getpgid(process.pid), signal.SIGINT)
-            
-            # Optionally wait for it to cleanly exit, but don't block too long
-            try:
-                # We can't block here for too long if we want to be responsive
-                # process.wait(timeout=2)
-                pass 
-            except subprocess.TimeoutExpired:
-                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-            
-            del self.launch_services[launch_name]
-            self.get_logger().info(f"Stopped launch file '{launch_name}'.")
-            
-            # Broadcast status to all clients
-            payload = json.dumps({"type": "process_status", "name": launch_name, "status": "stopped"})
+
+            # Immediately tell clients we're in the process of stopping
+            payload = json.dumps({"type": "process_status", "name": launch_name, "status": "stopping"})
             self.broadcast_message(payload)
+
+            # Wait for actual process exit in a background thread, then confirm
+            def _wait_and_confirm(proc, name):
+                try:
+                    proc.wait(timeout=20)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                        proc.wait(timeout=5)
+                    except Exception:
+                        pass
+                self.get_logger().info(f"Process '{name}' has fully stopped.")
+                confirmed = json.dumps({"type": "process_status", "name": name, "status": "stopped"})
+                self.broadcast_message(confirmed)
+
+            threading.Thread(target=_wait_and_confirm, args=(process, launch_name), daemon=True).start()
+
         except Exception as e:
             self.get_logger().error(f"Failed to stop launch file '{launch_name}': {e}")
 
